@@ -7,6 +7,7 @@ import Settings from "./components/Settings";
 import TextChat from "./components/TextChat";
 import SpeechTranscriber from "./components/SpeechTranscriber";
 import TextToSpeech from "./components/TextToSpeech";
+import VideoEditor from "./components/VideoEditor";
 import { cleanupCandidates, formatBytes, getCleanupCandidates, getDiagnostics, getHardwareSpecs, getHealth, getTelemetry, getBackendOptions, getBackendStatus, listGeneratedOutputs, listLlmConversations, saveLlmConversation, deleteLlmConversation, listSpeechTranscriptions, deleteSpeechTranscription, listTtsOutputs, deleteTtsOutput } from "./services/api";
 import "./App.css";
 
@@ -17,6 +18,7 @@ const ROUTE_TO_TAB = {
   images: "generator",
   transcribe: "speech",
   voice: "tts",
+  video: "video",
   models: "models",
   settings: "settings",
 };
@@ -869,6 +871,13 @@ function App() {
             onDeleteOutput={handleDeleteTtsOutput}
             ttsSettings={ttsSettings}
             setTtsSettings={setTtsSettings}
+          />
+        </div>
+
+        <div style={{ display: activeTab === "video" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
+          <VideoEditor
+            showAlert={showAlert}
+            showConfirm={showConfirm}
           />
         </div>
 

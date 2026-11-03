@@ -12,6 +12,7 @@ const path     = require("path");
 const { spawn, spawnSync, execSync, exec, execFile } = require("child_process");
 const { comprehensiveWebSearch } = require("../search/core");
 const { detectModelKindCached } = require("./model-kind.cjs");
+const createVideoFeature = require("./video.cjs");
 
 // HTTP keep-alive agent for llama-server (eliminates TCP handshake per request)
 const llmHttpAgent = new http.Agent({
@@ -2808,7 +2809,7 @@ function transcribeWavBuffer(buffer, options = {}) {
       // Dictation (the Voice screen's mic) only wants the text, not a saved transcript
       if (options.save === false) {
         speechError = null;
-        resolve({ text, model: model.filename, language, durationMs: Date.now() - startedAt });
+        resolve({ text, model: model.filename, language, durationMs: Date.now() - startedAt, raw });
         return;
       }
       const saved = saveTranscript({
@@ -6182,6 +6183,17 @@ function json(res, code, obj) {
 }
 
 // ── HTTP Server ───────────────────────────────────────────────────────────────
+const videoFeature = createVideoFeature({
+  ROOT,
+  TTS_OUTPUTS,
+  MIME,
+  json,
+  readJsonBody,
+  pathInside,
+  safeOutputName,
+  transcribeWavBuffer,
+});
+
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -7730,6 +7742,15 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
       console.error(`  [api] Failed to delete model ${safeFilename}:`, err);
       return json(res, 500, { error: err.message });
     }
+  }
+
+  // ── AI video editor ───────────────────────────────────────────────────────
+  try {
+    if (await videoFeature.handle(req, res)) return;
+  } catch (err) {
+    console.error("  [video] Request failed:", err);
+    if (!res.headersSent) json(res, err.statusCode || 500, { ok: false, error: err.message || "Video request failed." });
+    return;
   }
 
   if (req.url.startsWith("/api/")) {
