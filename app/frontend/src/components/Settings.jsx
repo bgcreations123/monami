@@ -784,6 +784,25 @@ function Settings({
           <SettingRow title="Flash attention" description="Faster attention with less memory">
             <Switch label="Flash attention" checked={constraints.useFlashAttn} onChange={(v) => updateConstraint("useFlashAttn", v)} />
           </SettingRow>
+          {constraints.backendType !== "cpu" && constraints.useGpu !== false && !isOpenVinoNpu && constraints.backendType !== "apple-npu" && (
+            <SettingRow
+              title="Model precision"
+              description="Auto compresses large models that would not fit in GPU memory"
+              wide
+            >
+              <Choice
+                label="Model precision"
+                value={constraints.weightType || "auto"}
+                options={[
+                  { id: "auto", label: "Auto" },
+                  { id: "f16", label: "Full" },
+                  { id: "q8_0", label: "8-bit" },
+                  { id: "q4_0", label: "4-bit" },
+                ]}
+                onSelect={(value) => updateConstraint("weightType", value)}
+              />
+            </SettingRow>
+          )}
         </ul>
 
         <div className="page-section-label settings-group-label">Acceleration</div>

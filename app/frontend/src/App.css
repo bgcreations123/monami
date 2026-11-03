@@ -3845,33 +3845,53 @@ html[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) {
 
 .sidebar-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  height: 48px;
+  height: auto;
+  min-height: 48px;
   padding: 0 0 0 10px;
-  margin-bottom: 18px;
+  margin-bottom: 40px;
+  overflow: visible;
+}
+
+.sidebar-header-actions {
+  margin-top: 29px;
 }
 
 .sidebar-brand {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
   min-width: 0;
+  padding: 4px 0 8px;
+  position: relative;
+  overflow: visible;
 }
 
 .sidebar-brand-name {
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
   color: var(--md-sys-color-on-surface);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-align: center;
+  margin-top: -30px;
+  margin-left: 36px;
+  position: relative;
+  z-index: 5;
 }
 
 .sidebar-mark {
   color: var(--md-sys-color-on-surface);
   flex-shrink: 0;
+  max-width: 100%;
+  height: auto;
+  margin-top: 15px;
+  filter: drop-shadow(0 0 10px rgba(202, 183, 131, 0.55));
+  animation: monami-breathe 4.2s ease-in-out infinite;
+  transform-origin: center;
 }
 
 .sidebar-header-actions {
@@ -4545,4 +4565,15 @@ body {
   font-size: 1rem;
   font-weight: 500;
   color: var(--md-sys-color-on-surface);
+}
+
+@keyframes monami-breathe {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.03) rotate(-2deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-mark {
+    animation: none;
+  }
 }

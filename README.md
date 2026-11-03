@@ -1,14 +1,13 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/branding/logo/mark-on-dark.svg" />
-    <img src="assets/branding/logo/mark.svg" alt="Portable AI Studio logo" width="120" height="120" />
+    <img src="assets/branding/logo/monami-logo.png" alt="Monami logo" width="120" height="120" />
   </picture>
 </p>
 
-<h1 align="center">Portable AI Studio</h1>
+<h1 align="center">Monami</h1>
 
 <p align="center">
-  <strong>A premium, zero-configuration local AI studio and offline GUI for Stable Diffusion (Image Generation), LLMs (Chat), Whisper (Speech-to-Text), and Kokoro (Text-to-Speech). Powered by hardware-accelerated GPU and NPU execution on Windows, Linux, and macOS.</strong>
+  <strong>A premium, zero-configuration Monami and offline GUI for Stable Diffusion (Image Generation), LLMs (Chat), Whisper (Speech-to-Text), and Kokoro (Text-to-Speech). Powered by hardware-accelerated GPU and NPU execution on Windows, Linux, and macOS.</strong>
 </p>
 
 <p align="center">
@@ -23,7 +22,7 @@
 
 <p align="center">
   <a href="https://youtu.be/yeFvP3SWMak">
-    <img src="https://img.youtube.com/vi/yeFvP3SWMak/maxresdefault.jpg" alt="Uncensored AI Studio Video Tutorial" width="800" style="border-radius: 8px;" />
+    <img src="https://img.youtube.com/vi/yeFvP3SWMak/maxresdefault.jpg" alt="Monami Video Tutorial" width="800" style="border-radius: 8px;" />
   </a>
 </p>
 
@@ -65,7 +64,7 @@
 
 ## 📖 Table of Contents
 * [Screenshots](#screenshots)
-* [What is Portable AI Studio?](#what-is-uncensored-ai-studio)
+* [What is Monami?](#what-is-Monami)
 * [Key Features](#key-features)
 * [Workspace & Engine Architecture](#workspace-architecture)
 * [Supported Models](#supported-models)
@@ -81,9 +80,9 @@
 
 ---
 
-## <a id="what-is-uncensored-ai-studio"></a>📖 What is Portable AI Studio?
+## <a id="what-is-Monami"></a>📖 What is Monami?
 
-**Portable AI Studio** is a completely offline, zero-setup, self-contained AI studio for Windows, Linux, and macOS. Unlike cloud-based AI systems, it runs entirely on your own hardware with no censorship, tracking, subscriptions, or login requirements.
+**Monami** is a completely offline, zero-setup, self-contained AI studio for Windows, Linux, and macOS. Unlike cloud-based AI systems, it runs entirely on your own hardware with no censorship, tracking, subscriptions, or login requirements.
 
 It unifies four major local AI capabilities into one high-performance desktop interface:
 1. **🎨 Image Generation (Stable Diffusion):** Generate and edit high-quality images offline using `.safetensors`, `.gguf`, or `.ckpt` model weights.

@@ -28,6 +28,23 @@ function pathToFileUrl(filePath) {
   return `file:///${resolved.replace(/^\/+/, "")}`;
 }
 
+// kokoro-js loads its model files through @huggingface/transformers. Transformers.js
+// v3 ignores TRANSFORMERS_CACHE and uses env.cacheDir, so load the exact ESM module
+// instance kokoro-js imports and point its cache at the app cache folder.
+async function resolveRuntimeModule(name) {
+  const runtime = process.env.TTS_RUNTIME || "";
+  if (!runtime) return name;
+  if (name === "@huggingface/transformers") {
+    const esmEntry = path.join(runtime, "node_modules", "@huggingface", "transformers", "dist", "transformers.node.mjs");
+    try {
+      await fs.access(esmEntry);
+      return pathToFileUrl(esmEntry);
+    } catch (_) {}
+  }
+  const runtimeRequire = createRequire(path.join(runtime, "package.json"));
+  return pathToFileUrl(runtimeRequire.resolve(name));
+}
+
 // Kokoro truncates one call at ~510 tokens, so long text is spoken a sentence at a time and joined.
 // Sentence-sized parts also give the player exact start/end times to sync word highlighting to.
 const MAX_CHUNK_CHARS = 300;
@@ -80,11 +97,19 @@ function reportProgress(update) {
 
 async function main() {
   const payload = JSON.parse(await readStdin());
-  process.env.TRANSFORMERS_CACHE = payload.cacheDir || process.env.TRANSFORMERS_CACHE || "";
-  process.env.HF_HOME = payload.cacheDir || process.env.HF_HOME || "";
+  const cacheDir = payload.cacheDir || process.env.TTS_CACHE || process.env.TRANSFORMERS_CACHE || "";
+  process.env.TRANSFORMERS_CACHE = cacheDir;
+  process.env.HF_HOME = cacheDir;
 
   const chunks = splitIntoChunks(payload.text);
   reportProgress({ phase: "loading", done: 0, total: chunks.length });
+
+  // Must be set before kokoro-js starts fetching model files.
+  if (cacheDir) {
+    const transformers = await import(await resolveRuntimeModule("@huggingface/transformers"));
+    const env = transformers.env || transformers.default?.env;
+    if (env) env.cacheDir = cacheDir;
+  }
 
   const kokoro = await import(resolveRuntimePackage("kokoro-js"));
   const { KokoroTTS } = kokoro;

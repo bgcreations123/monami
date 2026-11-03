@@ -1,4 +1,4 @@
-# Local AI Studio - Kokoro TTS setup for Windows
+# Monami - Kokoro TTS setup for Windows
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $rootDir = Split-Path -Parent (Split-Path -Parent $scriptDir)

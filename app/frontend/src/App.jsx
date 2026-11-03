@@ -138,6 +138,7 @@ function App() {
     vaeOnCpu: false,
     threads: 4,
     backendType: "auto",
+    weightType: "auto",
   });
 
   const [textSettings, setTextSettings] = useState(() => {

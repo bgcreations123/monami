@@ -287,8 +287,8 @@ function Sidebar({
       />
       <div className="sidebar-header">
         <div className="sidebar-brand">
-          <BrandMark className="sidebar-mark" size={24} title="Local Studio" />
-          <span className="sidebar-brand-name">Local Studio</span>
+          <BrandMark className="sidebar-mark" size={48} title="Monami" />
+          <span className="sidebar-brand-name">onami</span>
         </div>
         <div className="sidebar-header-actions">
           <button

@@ -287,6 +287,7 @@ export async function startServer(modelPath, constraints) {
         vae_tiling: constraints.vaeTiling !== false,
         vae_on_cpu: constraints.vaeOnCpu === true,
         flash_attn: constraints.useFlashAttn !== false,
+        weight_type: constraints.weightType || "auto",
       }),
     });
     const text = await res.text();
