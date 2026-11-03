@@ -29,6 +29,8 @@ import {
   getLlmStatus,
   getVideoStatus,
   importVideoFile,
+  listLlmModels,
+  startLlm,
   listTtsModels,
   listVideoOutputs,
   listVideoSources,
@@ -494,8 +496,22 @@ export default function VideoEditor({ showAlert, showConfirm }) {
       return;
     }
     if (!llmStatus?.ready) {
-      setError("No text model is loaded. Download one on Models and start it in Chat, then try again.");
-      return;
+      const models = await listLlmModels().catch(() => []);
+      const candidate = models.find((model) => !model.isProjector && model.filename) || models[0];
+      if (!candidate?.filename) {
+        setError("No text model is installed. Download one on the Models page, then try again.");
+        return;
+      }
+      setNotice(`Starting text model ${candidate.name || candidate.filename}…`);
+      try {
+        await startLlm(candidate.filename);
+        const next = await getLlmStatus();
+        setLlmStatus(next);
+        if (!next?.ready) throw new Error(next?.error || "The text model did not start.");
+      } catch (err) {
+        setError(err.message || String(err));
+        return;
+      }
     }
     setAiBusy(true);
     setError("");
