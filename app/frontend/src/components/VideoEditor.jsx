@@ -25,6 +25,8 @@ import {
   getVideoAnalysis,
   getVideoCaptions,
   getVideoJobStatus,
+  chatWithLlm,
+  getLlmStatus,
   getVideoStatus,
   importVideoFile,
   listTtsModels,
@@ -130,6 +132,11 @@ export default function VideoEditor({ showAlert, showConfirm }) {
   const [outputName, setOutputName] = useState("");
   const [lastExport, setLastExport] = useState(null);
 
+  const [aiCommand, setAiCommand] = useState("");
+  const [aiPlan, setAiPlan] = useState(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [llmStatus, setLlmStatus] = useState({ ready: false, running: false, error: "" });
+
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
   const jobKindRef = useRef("");
@@ -191,6 +198,22 @@ export default function VideoEditor({ showAlert, showConfirm }) {
     refreshOutputs();
     refreshTts();
   }, [refreshStatus, refreshVideos, refreshOutputs, refreshTts]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const next = await getLlmStatus();
+        if (!cancelled) setLlmStatus(next);
+      } catch (_) {}
+    };
+    tick();
+    const interval = setInterval(tick, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Remember the running task type so its result can be routed when polling finishes
   useEffect(() => {
@@ -356,12 +379,13 @@ export default function VideoEditor({ showAlert, showConfirm }) {
     }
   }, [selected]);
 
-  const handleNarration = useCallback(async () => {
-    const text = narrationText.trim();
+  const handleNarration = useCallback(async (textOverride) => {
+    const text = String(textOverride ?? narrationText).trim();
     if (!text) {
       setError("Type the narration text first.");
-      return;
+      return null;
     }
+    if (textOverride != null) setNarrationText(text);
     setError("");
     setNotice("");
     setNarrationBusy(true);
@@ -374,14 +398,16 @@ export default function VideoEditor({ showAlert, showConfirm }) {
       setNarration(output);
       setNotice("Voiceover generated. It is mixed in when you export.");
       refreshTts();
+      return output;
     } catch (err) {
       setError(err.message || String(err));
+      return null;
     } finally {
       setNarrationBusy(false);
     }
   }, [narrationText, ttsModel, ttsVoice, ttsSpeed, refreshTts]);
 
-  const handleExport = useCallback(async () => {
+  const handleExport = useCallback(async (narrationOverride = null, outputNameOverride = null) => {
     if (!selected) return;
     if (captionsEnabled && !captions?.segments?.length) {
       setError("Generate captions first, or turn captions off for this export.");
@@ -396,7 +422,7 @@ export default function VideoEditor({ showAlert, showConfirm }) {
     try {
       await renderVideoExport({
         videoId: selected.id,
-        outputName: outputName || selected.originalName,
+        outputName: outputNameOverride || outputName || selected.originalName,
         trimStart,
         trimEnd,
         speed,
@@ -412,8 +438,8 @@ export default function VideoEditor({ showAlert, showConfirm }) {
           burn: captionBurn,
           style: { size: captionSize, color: captionColor, position: captionPosition },
         },
-        narration: narration
-          ? { file: narration.audioFile, volume: narrationVolume, delay: narrationDelay }
+        narration: (narrationOverride || narration)
+          ? { file: (narrationOverride || narration).audioFile, volume: narrationVolume, delay: narrationDelay }
           : null,
       });
       jobKindRef.current = "render";
@@ -435,6 +461,143 @@ export default function VideoEditor({ showAlert, showConfirm }) {
       setError(err.message || String(err));
     }
   }, []);
+
+  const waitForJob = useCallback(async () => {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const next = await getVideoJobStatus();
+      setJob(next);
+      if (!next.active) return next;
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    }
+  }, []);
+
+  const extractJson = (text) => {
+    const fenced = String(text || "").match(/```(?:json)?\\s*([\\s\\S]*?)```/i);
+    const candidate = fenced ? fenced[1] : String(text || "");
+    const start = candidate.indexOf("{");
+    const end = candidate.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) {
+      throw new Error("The AI did not return a usable edit plan. Try rephrasing the command.");
+    }
+    return JSON.parse(candidate.slice(start, end + 1));
+  };
+
+  const handleAiEdit = useCallback(async () => {
+    const command = aiCommand.trim();
+    if (!command) {
+      setError("Type an instruction for the AI first.");
+      return;
+    }
+    if (!selected) {
+      setError("Import and select a video before asking the AI to edit it.");
+      return;
+    }
+    if (!llmStatus?.ready) {
+      setError("No text model is loaded. Download one on Models and start it in Chat, then try again.");
+      return;
+    }
+    setAiBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const metadata = {
+        name: selected.name,
+        duration: selected.duration,
+        width: selected.width,
+        height: selected.height,
+        hasAudio: selected.hasAudio,
+        current: {
+          trimStart,
+          trimEnd,
+          speed,
+          rotate,
+          flipH,
+          flipV,
+          resolution,
+          volume,
+          removeSilence,
+          silencePreset,
+          captionsEnabled,
+          captionBurn,
+        },
+      };
+      const system = [
+        "You are a video editing assistant for a local offline editor.",
+        "Convert the user's instruction into a JSON object and output JSON only.",
+        "Available fields (include only the ones to change):",
+        "trimStart (seconds), trimEnd (seconds), speed (0.25-4), rotate (0,90,180,270),",
+        "flipH (boolean), flipV (boolean), resolution (\"source\",\"1080\",\"720\",\"480\"),",
+        "volume (0-2), removeSilence (boolean), silencePreset (\"gentle\",\"normal\",\"aggressive\"),",
+        "captions (boolean), captionBurn (boolean), captionSize (\"s\",\"m\",\"l\"),",
+        "captionColor (hex), captionPosition (\"top\",\"middle\",\"bottom\"),",
+        "narrationText (string or null), narrationVolume (0-2), narrationDelay (seconds),",
+        "export (boolean, true only when the user asks to render/export/finish).",
+        "If the user asks for captions, set captions:true. If they ask to remove pauses, set removeSilence:true.",
+        "If they ask to narrate, put the spoken text in narrationText, otherwise null.",
+        "If they ask to render/export/finish, set export:true.",
+        "Use null for fields you are not changing; never use empty strings for booleans.",
+        "Do not invent numbers; use sensible defaults when the user is vague.",
+      ].join(" ");
+      const { content } = await chatWithLlm(
+        [
+          { role: "system", content: system },
+          { role: "user", content: `Current video: ${JSON.stringify(metadata)}\\nInstruction: ${command}` },
+        ],
+        { temperature: 0.1, maxTokens: 700 },
+      );
+      const plan = extractJson(content);
+      setAiPlan(plan);
+
+      if (typeof plan.trimStart === "number") setTrimStart(Math.max(0, Math.min(plan.trimStart, selected.duration)));
+      if (typeof plan.trimEnd === "number") setTrimEnd(Math.max(0.2, Math.min(plan.trimEnd, selected.duration)));
+      if (typeof plan.speed === "number") setSpeed(Math.max(0.25, Math.min(plan.speed, 4)));
+      if (typeof plan.rotate === "number") setRotate([0, 90, 180, 270].includes(plan.rotate) ? plan.rotate : rotate);
+      if (typeof plan.flipH === "boolean") setFlipH(plan.flipH);
+      if (typeof plan.flipV === "boolean") setFlipV(plan.flipV);
+      if (typeof plan.resolution === "string" && plan.resolution) setResolution(["source", "1080", "720", "480"].includes(plan.resolution) ? plan.resolution : resolution);
+      if (typeof plan.volume === "number") setVolume(Math.max(0, Math.min(plan.volume, 2)));
+      if (typeof plan.removeSilence === "boolean") setRemoveSilence(plan.removeSilence);
+      if (typeof plan.silencePreset === "string" && plan.silencePreset && ["gentle", "normal", "aggressive"].includes(plan.silencePreset)) setSilencePreset(plan.silencePreset);
+      if (typeof plan.captions === "boolean") setCaptionsEnabled(plan.captions);
+      if (typeof plan.captionBurn === "boolean") setCaptionBurn(plan.captionBurn);
+      if (typeof plan.captionSize === "string" && plan.captionSize) setCaptionSize(plan.captionSize);
+      if (typeof plan.captionColor === "string" && plan.captionColor) setCaptionColor(plan.captionColor);
+      if (typeof plan.captionPosition === "string" && plan.captionPosition) setCaptionPosition(plan.captionPosition);
+      if (typeof plan.narrationVolume === "number") setNarrationVolume(Math.max(0, Math.min(plan.narrationVolume, 2)));
+      if (typeof plan.narrationDelay === "number") setNarrationDelay(Math.max(0, plan.narrationDelay));
+      if (typeof plan.outputName === "string" && plan.outputName.trim()) setOutputName(plan.outputName.trim());
+
+      // Run any requested generation steps in order
+      let generatedNarration = null;
+      if (plan.removeSilence === true && !analysis) {
+        await handleAnalyze();
+        await waitForJob();
+      }
+      if (plan.captions === true && !captions?.segments?.length) {
+        await handleCaptions();
+        await waitForJob();
+      }
+      if (typeof plan.narrationText === "string" && plan.narrationText.trim()) {
+        generatedNarration = await handleNarration(plan.narrationText);
+      }
+      const shouldExport = plan.export === true || (typeof plan.export === "string" && plan.export.trim().length > 0);
+      if (shouldExport) {
+        await handleExport(generatedNarration, typeof plan.export === "string" ? plan.export.trim() : null);
+        await waitForJob();
+      }
+
+      setNotice(plan.export === true ? "AI edit applied and exported." : "AI edit applied. Review the settings, then export.");
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setAiBusy(false);
+    }
+  }, [
+    aiCommand, selected, llmStatus, trimStart, trimEnd, speed, rotate, flipH, flipV,
+    resolution, volume, removeSilence, silencePreset, captionsEnabled, captionBurn, analysis,
+    captions, handleAnalyze, handleCaptions, handleNarration, handleExport, waitForJob,
+  ]);
 
   const effectiveDuration = useMemo(() => {
     if (!selected) return 0;
@@ -614,6 +777,43 @@ export default function VideoEditor({ showAlert, showConfirm }) {
             </section>
 
             <aside className="video-panel">
+              <section className="video-card">
+                <div className="video-card-head">
+                  <Sparkles size={16} aria-hidden="true" />
+                  <h3>AI edit with commands</h3>
+                </div>
+                <p className="video-hint">
+                  Describe what to do in plain language. There is no separate "video model":
+                  editing runs on FFmpeg, Whisper and Kokoro on this machine, and your loaded text
+                  model ({llmStatus?.ready ? "ready" : "not loaded"}) turns the command into edits.
+                  {llmStatus?.ready ? "" : " Download/start a text model in Models or Chat."}
+                </p>
+                <textarea
+                  className="video-narration-text"
+                  value={aiCommand}
+                  placeholder="Example: trim to the first 30 seconds, remove silence, add captions, narrate 'Welcome to my video', and export."
+                  onChange={(event) => setAiCommand(event.target.value)}
+                  disabled={aiBusy || busy}
+                />
+                <div className="video-inline-fields">
+                  <button
+                    type="button"
+                    className="btn btn-primary video-narrate-btn"
+                    disabled={aiBusy || busy || !aiCommand.trim() || !selected}
+                    onClick={handleAiEdit}
+                  >
+                    {aiBusy ? <LoaderCircle size={14} className="video-spin" aria-hidden="true" /> : <Sparkles size={14} aria-hidden="true" />}
+                    {aiBusy ? "Working…" : "Run AI edit"}
+                  </button>
+                </div>
+                {aiPlan && (
+                  <details className="video-ai-plan">
+                    <summary>AI plan</summary>
+                    <pre>{JSON.stringify(aiPlan, null, 2)}</pre>
+                  </details>
+                )}
+              </section>
+
               <section className="video-card">
                 <div className="video-card-head">
                   <Scissors size={16} aria-hidden="true" />

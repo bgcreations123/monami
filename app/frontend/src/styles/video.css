@@ -543,6 +543,33 @@
   margin-top: 8px;
 }
 
+/* AI plan disclosure */
+.video-ai-plan {
+  margin-top: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--sidebar-active, var(--md-sys-color-surface-variant));
+  padding: 8px 10px;
+  font-size: 0.78rem;
+}
+
+.video-ai-plan summary {
+  cursor: pointer;
+  color: var(--md-sys-color-outline);
+  font-weight: 500;
+}
+
+.video-ai-plan pre {
+  margin: 8px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--md-sys-color-on-surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.74rem;
+}
+
 /* Export */
 .video-export-btn {
   width: 100%;
