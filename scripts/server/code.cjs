@@ -14,7 +14,7 @@ const { spawn } = require("child_process");
 
 const MAX_READ_BYTES = 512 * 1024;        // read_file cap for the model
 const MAX_EDITOR_BYTES = 4 * 1024 * 1024; // editor cap
-const MAX_TOOL_RESULT_CHARS = 7000;       // per tool result kept in the prompt
+const MAX_TOOL_RESULT_CHARS = 5000;       // per tool result kept in the prompt
 const MAX_COMMAND_OUTPUT = 200 * 1024;
 const MAX_TREE_ENTRIES = 320;
 const MAX_SEARCH_RESULTS = 80;
@@ -488,7 +488,7 @@ RULES
         : `Command execution is DISABLED. Do not call run_command. If a command is needed, explain it and ask the user to run it in the terminal.`,
       ``,
       `PROJECT FILES (${tree.truncated ? "truncated" : "full"} listing):`,
-      truncate(tree.text, 5000),
+      truncate(tree.text, 3000),
       ``,
       TOOL_DOCS,
     ].join("\n");
@@ -1109,7 +1109,7 @@ RULES
             tool: call.tool,
             summary: result.summary,
             ok: result.ok !== false,
-            detail: truncate(result.detail || "", 4000),
+            detail: truncate(result.detail || "", 3000),
           });
           if (result.change) changes.push(result.change);
           if (result.workspaceChanged) {
