@@ -11,6 +11,7 @@ import {
   startLlm,
   stopLlm,
   downloadBackend,
+  getBackendStatus,
   getDownloadProgress,
   downloadLlmModel,
   getBackendOptions,
@@ -1295,6 +1296,19 @@ function Settings({
     setCodeLoadBusy(true);
     setSelectedCodeModel(filename);
     try {
+      const imageStatus = await getBackendStatus().catch(() => null);
+      const imageModel = imageStatus?.ready && imageStatus.settings?.model
+        ? String(imageStatus.settings.model).split(/[\\/]/).pop().replace(/\.(safetensors|ckpt|gguf)$/i, "")
+        : null;
+      if (imageModel) {
+        const confirmed = await showConfirm?.({
+          title: "Unload the image model?",
+          message: `${imageModel} is loaded for images. Monami can only keep one large model in memory, so it will be unloaded to load ${filename.replace(/\.gguf$/i, "")}.`,
+          confirmLabel: "Unload and load",
+        });
+        if (!confirmed) { setCodeLoadBusy(false); return; }
+        await stopServer().catch(() => {});
+      }
       localStorage.setItem("selectedLlmModel", filename);
       const options = {
         threads: pendingTextSettings?.threads,
@@ -1362,14 +1376,14 @@ function Settings({
   };
 
   const renderCodeSettings = () => {
-    const installedNames = new Set(codeModels.map((m) => m.filename));
-    const merged = CODING_MODELS.map((m) => ({
-      ...m,
-      installed: installedNames.has(m.filename),
-    }));
+    const installedLower = new Map(codeModels.map((m) => [String(m.filename).toLowerCase(), m.filename]));
+    const merged = CODING_MODELS.map((m) => {
+      const realFilename = installedLower.get(m.filename.toLowerCase()) || m.filename;
+      return { ...m, filename: realFilename, installed: installedLower.has(m.filename.toLowerCase()) };
+    });
     // also include any installed model not in the recommended list
     for (const m of codeModels) {
-      if (!CODING_MODELS.some((c) => c.filename === m.filename)) {
+      if (!CODING_MODELS.some((c) => c.filename.toLowerCase() === String(m.filename).toLowerCase())) {
         merged.push({ name: m.filename.replace(/\.gguf$/i, ""), filename: m.filename, size: "—", tier: "Installed", url: "", installed: true });
       }
     }
@@ -1394,7 +1408,7 @@ function Settings({
         <div className="page-section-label settings-group-label">Available coding models</div>
         <div className="code-model-grid">
           {merged.map((model) => {
-            const isLoaded = loadedName === model.filename;
+            const isLoaded = loadedName.toLowerCase() === model.filename.toLowerCase();
             const isDownloading = codeDownloading === model.filename;
             return (
               <div key={model.filename} className={`code-model-card ${isLoaded ? "loaded" : ""}`}>
