@@ -221,6 +221,16 @@ function Settings({
   const [codeModels, setCodeModels] = useState([]);
   const [selectedCodeModel, setSelectedCodeModel] = useState(() => localStorage.getItem("selectedLlmModel") || "");
   const [codeLoadBusy, setCodeLoadBusy] = useState(false);
+  const [codeDownloading, setCodeDownloading] = useState(null); // filename being downloaded
+  const [codeDownloadProgress, setCodeDownloadProgress] = useState(0);
+  const [codeDownloadSpeed, setCodeDownloadSpeed] = useState("");
+  const codeDownloadPollRef = useRef(null);
+  const refreshCodeModels = useCallback(async () => {
+    try {
+      const models = await listLlmModels();
+      setCodeModels(models);
+    } catch (_) {}
+  }, []);
   const [llmBackends, setLlmBackends] = useState({ available: [], candidates: [] });
   const [llmStats, setLlmStats] = useState({ benchmarks: [] });
   const [benchmarkBusy, setBenchmarkBusy] = useState(false);
@@ -333,7 +343,17 @@ function Settings({
     return () => { cancelled = true; };
   }, []);
 
-  const isSD15OrCustom = activeModel ? isSD15OrCustomModel(activeModel) : false;
+  useEffect(() => {
+    if (activeSection === "code") {
+      refreshCodeModels();
+    }
+  }, [activeSection, refreshCodeModels]);
+
+  useEffect(() => {
+    return () => {
+      if (codeDownloadPollRef.current) clearInterval(codeDownloadPollRef.current);
+    };
+  }, []);
   const isOpenVinoNpu = constraints.backendType === "openvino-npu";
   const supportsThinking = Boolean(llmStatus.ready && llmStatus.settings?.supportsThinking);
   const availableBackends = backendOptions?.options?.length
@@ -1259,14 +1279,22 @@ function Settings({
     </>
   );
 
-  const handleLoadCodeModel = async () => {
-    if (!selectedCodeModel) {
-      showAlert({ title: "Pick a Model", message: "Choose an installed GGUF model first.", danger: true });
-      return;
-    }
+  const CODING_MODELS = [
+    { name: "Qwen2.5-Coder 0.5B", filename: "qwen2.5-coder-0.5b-instruct-q4_k_m.gguf", size: "0.5 GB", tier: "Low", url: "https://huggingface.co/Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf" },
+    { name: "Qwen2.5-Coder 7B", filename: "qwen2.5-coder-7b-instruct-q4_k_m.gguf", size: "4.7 GB", tier: "Mid / High", url: "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf" },
+    { name: "Qwen2.5-Coder 14B", filename: "qwen2.5-coder-14b-instruct-q4_k_m.gguf", size: "9.0 GB", tier: "High", url: "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct-GGUF/resolve/main/qwen2.5-coder-14b-instruct-q4_k_m.gguf" },
+    { name: "Qwen2.5-Coder 32B", filename: "qwen2.5-coder-32b-instruct-q4_k_m.gguf", size: "19.9 GB", tier: "High (32GB+ RAM)", url: "https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct-GGUF/resolve/main/qwen2.5-coder-32b-instruct-q4_k_m.gguf" },
+    { name: "DeepSeek-Coder-V2-Lite", filename: "DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf", size: "9.2 GB", tier: "High", url: "https://huggingface.co/bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF/resolve/main/DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf" },
+    { name: "CodeLlama-34B-Instruct", filename: "codellama-34b-instruct.Q4_K_M.gguf", size: "19.9 GB", tier: "High (32GB+ RAM)", url: "https://huggingface.co/TheBloke/CodeLlama-34B-Instruct-GGUF/resolve/main/codellama-34b-instruct.Q4_K_M.gguf" },
+    { name: "Llama-3.1 8B", filename: "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf", size: "4.9 GB", tier: "High", url: "https://huggingface.co/lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf" },
+  ];
+
+  const handleLoadCodeModel = async (filename) => {
+    if (!filename) return;
     setCodeLoadBusy(true);
+    setSelectedCodeModel(filename);
     try {
-      localStorage.setItem("selectedLlmModel", selectedCodeModel);
+      localStorage.setItem("selectedLlmModel", filename);
       const options = {
         threads: pendingTextSettings?.threads,
         contextSize: Math.max(8192, Number(pendingTextSettings?.contextSize) || 0),
@@ -1284,9 +1312,8 @@ function Settings({
         performanceProfile: pendingTextSettings?.performanceProfile,
         preferredBackend: pendingTextSettings?.preferredBackend,
       };
-      const result = await startLlm(selectedCodeModel, options);
-      setLlmStatus({ ready: true, settings: result.settings || {}, model: selectedCodeModel });
-      showAlert({ title: "Model Loaded", message: `${selectedCodeModel.replace(/\.gguf$/i, "")} is ready for coding.` });
+      const result = await startLlm(filename, options);
+      setLlmStatus({ ready: true, settings: result.settings || {}, model: filename });
     } catch (err) {
       showAlert({ title: "Load Failed", message: err.message || String(err), danger: true });
     } finally {
@@ -1294,60 +1321,129 @@ function Settings({
     }
   };
 
+  const handleDownloadCodeModel = async (model) => {
+    if (codeDownloading) return;
+    setCodeDownloading(model.filename);
+    setCodeDownloadProgress(0);
+    setCodeDownloadSpeed("");
+    try {
+      await downloadLlmModel(model.url, model.filename);
+      // poll progress
+      if (codeDownloadPollRef.current) clearInterval(codeDownloadPollRef.current);
+      codeDownloadPollRef.current = setInterval(async () => {
+        try {
+          const status = await getDownloadProgress();
+          if (status.active) {
+            setCodeDownloadProgress(status.progress === -1 ? 0 : status.progress);
+            setCodeDownloadSpeed(`${status.speed || ""} ${status.eta ? "• ETA " + status.eta + "s" : ""}`.trim());
+          } else {
+            clearInterval(codeDownloadPollRef.current);
+            codeDownloadPollRef.current = null;
+            setCodeDownloading(null);
+            if (status.error) {
+              if (!String(status.error).toLowerCase().includes("cancelled")) {
+                showAlert({ title: "Download Failed", message: status.error, danger: true });
+              }
+            } else {
+              await refreshCodeModels();
+              // auto-load after download
+              await handleLoadCodeModel(model.filename);
+            }
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }, 1000);
+    } catch (err) {
+      setCodeDownloading(null);
+      showAlert({ title: "Download Failed", message: err.message || String(err), danger: true });
+    }
+  };
+
   const renderCodeSettings = () => {
-    const recommended = [
-      { name: "Qwen2.5-Coder-7B (balanced)", size: "4.7 GB", tier: "Mid/High" },
-      { name: "Qwen2.5-Coder-14B (stronger)", size: "9 GB", tier: "High" },
-      { name: "Qwen2.5-Coder-32B (best local)", size: "20 GB", tier: "High (32GB+ RAM)" },
-      { name: "DeepSeek-Coder-V2-Lite (MoE)", size: "9 GB", tier: "High" },
-      { name: "CodeLlama-34B-Instruct", size: "20 GB", tier: "High (32GB+ RAM)" },
-    ];
+    const installedNames = new Set(codeModels.map((m) => m.filename));
+    const merged = CODING_MODELS.map((m) => ({
+      ...m,
+      installed: installedNames.has(m.filename),
+    }));
+    // also include any installed model not in the recommended list
+    for (const m of codeModels) {
+      if (!CODING_MODELS.some((c) => c.filename === m.filename)) {
+        merged.push({ name: m.filename.replace(/\.gguf$/i, ""), filename: m.filename, size: "—", tier: "Installed", url: "", installed: true });
+      }
+    }
+    const loadedName = llmStatus.ready ? (llmStatus.model || "") : "";
+
     return (
       <>
         <HardwareSummary specs={specs} />
-        <div className="page-section-label settings-group-label">Model</div>
-        <ul className="row-list">
-          <SettingRow
-            title="Installed text models"
-            description={llmStatus.ready ? `Currently loaded: ${llmStatus.model || "—"}` : "No model loaded. Pick one below and load it."}
-          >
-            <select
-              className="settings-input"
-              value={selectedCodeModel}
-              onChange={(e) => setSelectedCodeModel(e.target.value)}
-            >
-              <option value="">Choose a model…</option>
-              {codeModels.map((model) => (
-                <option key={model.filename} value={model.filename}>
-                  {model.filename.replace(/\.gguf$/i, "")}
-                </option>
-              ))}
-            </select>
-          </SettingRow>
-          <SettingRow title="Load for coding" description="Loads the selected model into the shared text engine. The Code workspace uses it immediately.">
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={handleLoadCodeModel}
-              disabled={codeLoadBusy || !selectedCodeModel}
-            >
-              {codeLoadBusy ? "Loading…" : "Load model"}
-            </button>
-          </SettingRow>
-        </ul>
-        <div className="page-section-label settings-group-label">Recommended powerful coding models</div>
-        <ul className="row-list">
-          {recommended.map((item) => (
-            <li key={item.name} className="row-item settings-row">
-              <div className="row-item-main">
-                <div className="row-item-title">{item.name}</div>
-                <div className="row-item-meta">{item.size} · {item.tier} tier</div>
+
+        <div className="code-settings-hero">
+          <div className="code-settings-hero-mark">{"</>"}</div>
+          <div className="code-settings-hero-text">
+            <h3>Code model</h3>
+            <p>
+              {loadedName
+                ? <>Currently loaded: <strong>{loadedName.replace(/\.gguf$/i, "")}</strong>. The Code workspace and Text Chat both use this model.</>
+                : "No model loaded yet. Pick one below — download it if needed, then load it. Everything runs offline on this machine."}
+            </p>
+          </div>
+        </div>
+
+        <div className="page-section-label settings-group-label">Available coding models</div>
+        <div className="code-model-grid">
+          {merged.map((model) => {
+            const isLoaded = loadedName === model.filename;
+            const isDownloading = codeDownloading === model.filename;
+            return (
+              <div key={model.filename} className={`code-model-card ${isLoaded ? "loaded" : ""}`}>
+                <div className="code-model-card-head">
+                  <div className="code-model-card-name">{model.name}</div>
+                  {isLoaded && <span className="code-model-card-badge loaded">Loaded</span>}
+                  {!isLoaded && model.installed && <span className="code-model-card-badge installed">Installed</span>}
+                  {!isLoaded && !model.installed && <span className="code-model-card-badge">Not installed</span>}
+                </div>
+                <div className="code-model-card-meta">
+                  <span>{model.size}</span>
+                  <span className="code-model-card-dot">·</span>
+                  <span>{model.tier}</span>
+                </div>
+                {isDownloading && (
+                  <div className="code-model-card-progress">
+                    <div className="code-model-card-progress-bar" style={{ width: `${codeDownloadProgress}%` }} />
+                    <span>{codeDownloadProgress}% {codeDownloadSpeed}</span>
+                  </div>
+                )}
+                <div className="code-model-card-actions">
+                  {isLoaded ? (
+                    <button type="button" className="code-model-card-btn secondary" disabled>Active</button>
+                  ) : model.installed ? (
+                    <button
+                      type="button"
+                      className="code-model-card-btn primary"
+                      onClick={() => handleLoadCodeModel(model.filename)}
+                      disabled={codeLoadBusy || codeDownloading !== null}
+                    >
+                      {codeLoadBusy && selectedCodeModel === model.filename ? "Loading…" : "Load"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="code-model-card-btn download"
+                      onClick={() => handleDownloadCodeModel(model)}
+                      disabled={codeDownloading !== null}
+                    >
+                      {isDownloading ? "Downloading…" : "Download"}
+                    </button>
+                  )}
+                </div>
               </div>
-            </li>
-          ))}
-        </ul>
-        <p className="row-item-meta" style={{ padding: "8px 4px" }}>
-          Download any of these from the <strong>Models</strong> tab (Model Manager → Text models), then load it here or in the Code workspace top bar. Code shares the same text model as Text Chat. For the strongest results, use a 14B+ coder model on a machine with 16GB+ RAM.
+            );
+          })}
+        </div>
+
+        <p className="row-item-meta" style={{ padding: "8px 4px", marginTop: 8 }}>
+          Downloads run in the background and the model loads automatically when finished. Models are stored in <code>app/llm-models/</code>. For the strongest results use a 14B+ coder model on a machine with 16GB+ RAM. Nothing leaves your machine.
         </p>
       </>
     );
