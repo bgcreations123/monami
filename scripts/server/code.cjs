@@ -227,39 +227,39 @@ function createCodeFeature({ ROOT, json, readJsonBody, getLlmState }) {
   }
 
   // ── file system helpers ────────────────────────────────────────────────────
-  function listDirectory(abs) {
+  async function listDirectory(abs) {
     const root = workspaceRoot();
-    const entries = fs.readdirSync(abs, { withFileTypes: true })
-      .filter((entry) => !IGNORED_DIRS.has(entry.name))
-      .map((entry) => {
-        const entryAbs = path.join(abs, entry.name);
-        let size = 0;
-        let modified = 0;
-        try {
-          const stat = fs.statSync(entryAbs);
-          size = entry.isDirectory() ? 0 : stat.size;
-          modified = stat.mtimeMs;
-        } catch (_) {}
-        return {
-          name: entry.name,
-          path: summarizePath(entryAbs, root),
-          type: entry.isDirectory() ? "directory" : "file",
-          size,
-          modified,
-          language: entry.isDirectory() ? null : languageFor(entry.name),
-        };
-      })
-      .sort((a, b) => {
-        if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
-        return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-      });
+    const dirents = await fsp.readdir(abs, { withFileTypes: true });
+    const filtered = dirents.filter((entry) => !IGNORED_DIRS.has(entry.name));
+    const entries = await Promise.all(filtered.map(async (entry) => {
+      const entryAbs = path.join(abs, entry.name);
+      let size = 0;
+      let modified = 0;
+      try {
+        const stat = await fsp.stat(entryAbs);
+        size = entry.isDirectory() ? 0 : stat.size;
+        modified = stat.mtimeMs;
+      } catch (_) {}
+      return {
+        name: entry.name,
+        path: summarizePath(entryAbs, root),
+        type: entry.isDirectory() ? "directory" : "file",
+        size,
+        modified,
+        language: entry.isDirectory() ? null : languageFor(entry.name),
+      };
+    }));
+    entries.sort((a, b) => {
+      if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    });
     return entries;
   }
 
-  function walkTree(dirAbs, baseRoot, depth, state) {
+  async function walkTree(dirAbs, baseRoot, depth, state) {
     if (state.entries.length >= state.maxEntries || depth < 0) return;
     let entries;
-    try { entries = fs.readdirSync(dirAbs, { withFileTypes: true }); } catch (_) { return; }
+    try { entries = await fsp.readdir(dirAbs, { withFileTypes: true }); } catch (_) { return; }
     entries.sort((a, b) => {
       if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
       return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
@@ -270,11 +270,11 @@ function createCodeFeature({ ROOT, json, readJsonBody, getLlmState }) {
       const abs = path.join(dirAbs, entry.name);
       const relative = summarizePath(abs, baseRoot);
       let size = 0;
-      try { size = entry.isDirectory() ? 0 : fs.statSync(abs).size; } catch (_) {}
+      try { const st = await fsp.stat(abs); size = entry.isDirectory() ? 0 : st.size; } catch (_) {}
       if (entry.isDirectory()) {
         state.lines.push(`${"  ".repeat(depth + 1)}${entry.name}/`);
         state.entries.push({ path: relative, type: "directory", size: 0 });
-        if (depth > 0) walkTree(abs, baseRoot, depth - 1, state);
+        if (depth > 0) await walkTree(abs, baseRoot, depth - 1, state);
       } else {
         state.lines.push(`${"  ".repeat(depth + 1)}${entry.name}${size ? `  (${Math.max(1, Math.round(size / 1024))} KB)` : ""}`);
         state.entries.push({ path: relative, type: "file", size });
@@ -282,10 +282,10 @@ function createCodeFeature({ ROOT, json, readJsonBody, getLlmState }) {
     }
   }
 
-  function workspaceTree(maxDepth = 3, maxEntries = MAX_TREE_ENTRIES) {
+  async function workspaceTree(maxDepth = 3, maxEntries = MAX_TREE_ENTRIES) {
     const root = workspaceRoot();
     const state = { entries: [], lines: [], maxEntries };
-    walkTree(root, root, Math.max(0, Math.min(5, maxDepth)), state);
+    await walkTree(root, root, Math.max(0, Math.min(5, maxDepth)), state);
     return {
       root,
       name: path.basename(root) || root,
@@ -312,13 +312,13 @@ function createCodeFeature({ ROOT, json, readJsonBody, getLlmState }) {
     }
   }
 
-  function readTextFile(abs, { maxBytes = MAX_READ_BYTES } = {}) {
-    const stat = fs.statSync(abs);
+  async function readTextFile(abs, { maxBytes = MAX_READ_BYTES } = {}) {
+    const stat = await fsp.stat(abs);
     if (stat.isDirectory()) throw new Error("That path is a folder, not a file.");
     const buffer = Buffer.alloc(Math.min(stat.size, maxBytes + 1));
     if (stat.size > 0) {
-      const fd = fs.openSync(abs, "r");
-      try { fs.readSync(fd, buffer, 0, buffer.length, 0); } finally { fs.closeSync(fd); }
+      const fd = await fsp.open(abs, "r");
+      try { await fd.read(buffer, 0, buffer.length, 0); } finally { await fd.close(); }
     }
     const slice = buffer.subarray(0, Math.min(buffer.length, maxBytes));
     if (looksBinary(slice)) throw new Error("This looks like a binary file and cannot be shown as text.");
@@ -599,7 +599,7 @@ RULES
       if (!isDirectory(target.abs)) throw new Error(`${target.relative} is not a folder.`);
       const depth = clampNumber(argOf(args, ["depth"]), 0, 4, 2);
       const state = { entries: [], lines: [], maxEntries: 200 };
-      walkTree(target.abs, root, depth, state);
+      await walkTree(target.abs, root, depth, state);
       const text = state.lines.length ? state.lines.join("\n") : "(empty folder)";
       return { ok: true, summary: `Listed ${state.entries.length} entries`, detail: text, forModel: text };
     }
@@ -607,7 +607,7 @@ RULES
     if (tool === "read_file") {
       if (!pathArg) throw new Error("read_file needs a path.");
       const target = resolveSafe(pathArg);
-      const file = readTextFile(target.abs, { maxBytes: MAX_READ_BYTES });
+      const file = await readTextFile(target.abs, { maxBytes: MAX_READ_BYTES });
       let content = file.content;
       const start = Number(argOf(args, ["start_line", "startLine"]));
       const end = Number(argOf(args, ["end_line", "endLine"]));
@@ -659,7 +659,7 @@ RULES
       const newText = String(argOf(args, ["new_text", "newText", "new_string", "newString", "new", "replace", "replacement"]) ?? "");
       if (!oldText) throw new Error("edit_file needs old_text (the exact text to replace).");
       if (isBinaryFile(target.abs)) throw new Error(`${target.relative} is a binary file; the assistant cannot edit it.`);
-      const before = fs.readFileSync(target.abs, "utf8");
+      const before = await fsp.readFile(target.abs, "utf8");
       const replaceAll = args.replace_all === true || args.replaceAll === true;
       const occurrences = before.split(oldText).length - 1;
       if (occurrences === 0) {
@@ -689,7 +689,7 @@ RULES
       if (!fs.existsSync(target.abs)) throw new Error(`${target.relative} does not exist.`);
       if (fs.statSync(target.abs).isDirectory()) throw new Error("delete_file only removes files. Ask the user to remove folders.");
       if (isBinaryFile(target.abs)) throw new Error(`${target.relative} is a binary file; delete it from the file tree instead.`);
-      const before = fs.readFileSync(target.abs, "utf8");
+      const before = await fsp.readFile(target.abs, "utf8");
       await fsp.unlink(target.abs);
       await recordChange({ session, root, relative: target.relative, absolute: target.abs, action: "delete", before, after: null });
       return { ok: true, summary: `Deleted ${target.relative}`, detail: `Deleted ${target.relative}.`, forModel: `OK: deleted ${target.relative}.`, change: { path: target.relative, action: "delete" } };
@@ -807,14 +807,14 @@ RULES
       }
       fs.mkdirSync(target, { recursive: true });
       const workspace = setWorkspace(target);
-      // Notify the frontend so it switches to the new workspace.
+      const tree = await workspaceTree(2, 200);
       return {
         ok: true,
         summary: `Created project ${projectName}`,
         detail: `Project created at ${workspace}.`,
         forModel: `OK: created and opened project "${projectName}" at ${workspace}. The workspace root is now ${workspace}; all file paths are relative to it. The folder is currently empty — create the files the user asked for.`,
         change: null,
-        workspaceChanged: { workspace, name: path.basename(workspace), tree: workspaceTree(2, 200) },
+        workspaceChanged: { workspace, name: path.basename(workspace), tree },
       };
     }
 
@@ -826,13 +826,14 @@ RULES
         throw new Error(`"${targetPath}" is not an existing folder.`);
       }
       const workspace = setWorkspace(resolved);
+      const tree = await workspaceTree(2, 200);
       return {
         ok: true,
         summary: `Opened ${path.basename(workspace)}`,
         detail: `Workspace set to ${workspace}.`,
         forModel: `OK: opened project at ${workspace}. The workspace root is now ${workspace}; all file paths are relative to it.`,
         change: null,
-        workspaceChanged: { workspace, name: path.basename(workspace), tree: workspaceTree(2, 200) },
+        workspaceChanged: { workspace, name: path.basename(workspace), tree },
       };
     }
 
@@ -1005,7 +1006,7 @@ RULES
       return json(res, 400, { ok: false, error: "Write a message first." });
     }
 
-    const tree = workspaceTree(3, 200);
+    const tree = await workspaceTree(3, 200);
     const systemPrompt = buildSystemPrompt(root, tree, settings);
     const conversation = [
       { role: "system", content: systemPrompt },
@@ -1164,7 +1165,7 @@ RULES
       const llm = getLlmState();
       let tree = null;
       if (workspace) {
-        try { tree = workspaceTree(2, 200); } catch (_) {}
+        try { tree = await workspaceTree(2, 200); } catch (_) {}
       }
       return json(res, 200, {
         ok: true,
@@ -1186,7 +1187,8 @@ RULES
       if (!body) return;
       try {
         const workspace = setWorkspace(body.path);
-        return json(res, 200, { ok: true, workspace, name: path.basename(workspace), tree: workspaceTree(2, 200) });
+        const tree = await workspaceTree(2, 200);
+        return json(res, 200, { ok: true, workspace, name: path.basename(workspace), tree });
       } catch (error) {
         return json(res, 400, { ok: false, error: error.message });
       }
@@ -1198,7 +1200,8 @@ RULES
       if (!picked) return json(res, 200, { ok: true, cancelled: true });
       try {
         const workspace = setWorkspace(picked);
-        return json(res, 200, { ok: true, workspace, name: path.basename(workspace), tree: workspaceTree(2, 200) });
+        const tree = await workspaceTree(2, 200);
+        return json(res, 200, { ok: true, workspace, name: path.basename(workspace), tree });
       } catch (error) {
         return json(res, 400, { ok: false, error: error.message });
       }
@@ -1226,7 +1229,8 @@ RULES
           fs.mkdirSync(target, { recursive: true });
         }
         const workspace = setWorkspace(target);
-        return json(res, 200, { ok: true, workspace, name: path.basename(workspace), parent: baseParent, tree: workspaceTree(2, 200) });
+        const tree = await workspaceTree(2, 200);
+        return json(res, 200, { ok: true, workspace, name: path.basename(workspace), parent: baseParent, tree });
       } catch (error) {
         return json(res, 400, { ok: false, error: error.message });
       }
@@ -1237,7 +1241,7 @@ RULES
       try {
         const target = resolveSafe(url.searchParams.get("path") || ".");
         if (!isDirectory(target.abs)) return json(res, 400, { ok: false, error: "That path is not a folder." });
-        return json(res, 200, { ok: true, path: target.relative, entries: listDirectory(target.abs) });
+        return json(res, 200, { ok: true, path: target.relative, entries: await listDirectory(target.abs) });
       } catch (error) {
         return json(res, error.statusCode || 400, { ok: false, error: error.message });
       }
@@ -1248,7 +1252,7 @@ RULES
       if (!body) return;
       try {
         const target = resolveSafe(body.path);
-        const file = readTextFile(target.abs, { maxBytes: MAX_EDITOR_BYTES });
+        const file = await readTextFile(target.abs, { maxBytes: MAX_EDITOR_BYTES });
         return json(res, 200, {
           ok: true,
           path: target.relative,
