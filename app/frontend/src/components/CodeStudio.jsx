@@ -296,6 +296,35 @@ export default function CodeStudio({
     }
   }, [applyWorkspace, resetWorkspaceView, showAlert]);
 
+  const handleOpenByPath = useCallback(async () => {
+    const value = await askText({
+      title: "Open by path",
+      label: "Folder or file path",
+      placeholder: "C:\\Users\\you\\project  or  C:\\Users\\you\\file.js",
+      confirmLabel: "Open",
+    });
+    if (!value) return;
+    const trimmed = value.trim().replace(/^["']|["']$/g, "");
+    try {
+      const isFile = /\.[a-zA-Z0-9]{1,8}$/.test(trimmed) && !/[\\/]$/.test(trimmed);
+      let folder = trimmed;
+      let fileToOpen = null;
+      if (isFile) {
+        const idx = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
+        if (idx > 0) { folder = trimmed.slice(0, idx); fileToOpen = trimmed.slice(idx + 1); }
+      }
+      const data = await openCodeWorkspace(folder);
+      resetWorkspaceView();
+      applyWorkspace(data);
+      if (fileToOpen) {
+        const rel = fileToOpen.replace(/\\/g, "/");
+        try { await openFile(rel); } catch (_) {}
+      }
+    } catch (err) {
+      showAlert?.({ title: "Could Not Open Path", message: err.message || String(err), danger: true });
+    }
+  }, [applyWorkspace, askText, openFile, resetWorkspaceView, showAlert]);
+
   const handleNewProject = useCallback(async () => {
     const name = await askText({
       title: "New project",
@@ -776,6 +805,9 @@ export default function CodeStudio({
               : message
           )));
         },
+        onWorkspaceChanged: (payload) => {
+          if (payload?.workspace) applyWorkspace(payload);
+        },
         onToolResult: (payload) => {
           setMessages((prev) => prev.map((message) => (
             message.id === assistantId
@@ -829,7 +861,7 @@ export default function CodeStudio({
       runRef.current = null;
       setBusy(false);
     }
-  }, [llmStatus.ready, workspace, includeFile, activePath, settings, patchAssistant, persistSession, refreshTree, refreshChanges, setActiveSessionId, showAlert]);
+  }, [llmStatus.ready, workspace, includeFile, activePath, settings, patchAssistant, persistSession, refreshTree, refreshChanges, setActiveSessionId, showAlert, applyWorkspace]);
 
   const handleStop = useCallback(async () => {
     try {
@@ -940,6 +972,9 @@ export default function CodeStudio({
                 <div className="code-workspace-menu">
                   <button type="button" className="code-workspace-item primary" onClick={handleOpenFolder}>
                     <FolderOpen size={15} /> Open folder…
+                  </button>
+                  <button type="button" className="code-workspace-item" onClick={handleOpenByPath}>
+                    <FolderOpen size={15} /> Open by path…
                   </button>
                   <button type="button" className="code-workspace-item" onClick={handleNewProject}>
                     <Sparkles size={15} /> New project…

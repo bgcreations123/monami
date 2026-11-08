@@ -153,6 +153,7 @@ export async function streamCodeAgent(body, handlers = {}, signal) {
       case "token": handlers.onToken?.(payload.text || ""); break;
       case "reasoning": handlers.onReasoning?.(payload.text || ""); break;
       case "assistant": handlers.onAssistant?.(payload); break;
+      case "workspace": handlers.onWorkspaceChanged?.(payload); break;
       case "tool_start": handlers.onToolStart?.(payload); break;
       case "tool_result": handlers.onToolResult?.(payload); break;
       case "done": handlers.onDone?.(payload); break;

@@ -457,6 +457,8 @@ delete_file     {"tool":"delete_file","path":"src/old.js"}
 rename_file     {"tool":"rename_file","from":"src/a.js","to":"src/b.js"}
 search_files    {"tool":"search_files","query":"fetchUser","path":".","max_results":40}
 run_command     {"tool":"run_command","command":"npm test","cwd":"."}
+create_project  {"tool":"create_project","name":"my-app","location":"C:/Users/you/Documents"}
+open_project    {"tool":"open_project","path":"C:/Users/you/existing-folder"}
 
 RULES
 - To call a tool, reply with ONLY a fenced code block that starts with the word tool:
@@ -465,6 +467,7 @@ RULES
   \`\`\`
 - Do not wrap the tool block in prose or JSON arrays. Never invent tool names.
 - Paths must be relative to the workspace root. Never use absolute paths, drive letters, or "..".
+- create_project creates a brand-new project folder (location is optional; defaults to Documents/Monami Projects) and switches to it. open_project switches to an existing folder the user points to. After either, the new folder becomes the workspace root and file paths are relative to it.
 - Inspect files with read_file/search_files before changing them. Never invent file contents.
 - Use edit_file for targeted changes (old_text must match exactly, including whitespace). Use write_file only for a complete rewrite or a new file.
 - After a tool result arrives, continue working. When the task is complete, reply in plain language with a short summary of what changed and how to verify it.
@@ -494,6 +497,7 @@ RULES
   const TOOL_NAMES = new Set([
     "list_files", "read_file", "write_file", "edit_file", "create_file",
     "delete_file", "rename_file", "search_files", "run_command",
+    "create_project", "open_project",
   ]);
 
   function extractToolCalls(text) {
@@ -780,6 +784,58 @@ RULES
       };
     }
 
+    if (tool === "create_project") {
+      const projectName = String(argOf(args, ["name", "project", "project_name"]) || "").trim();
+      if (!projectName) throw new Error("create_project needs a name.");
+      if (/[\\/]/.test(projectName) || projectName === "." || projectName === "..") throw new Error("Project name cannot contain slashes.");
+      if (/[<>:\"|?*]/.test(projectName)) throw new Error("Project name contains invalid characters.");
+      const location = argOf(args, ["location", "parent", "path", "dir", "directory"]);
+      let baseParent = "";
+      if (location) {
+        const resolved = path.resolve(String(location));
+        if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+          throw new Error(`"${location}" is not an existing folder.`);
+        }
+        baseParent = resolved;
+      } else {
+        baseParent = path.join(os.homedir(), "Documents", "Monami Projects");
+      }
+      fs.mkdirSync(baseParent, { recursive: true });
+      const target = path.join(baseParent, projectName);
+      if (fs.existsSync(target) && !fs.statSync(target).isDirectory()) {
+        throw new Error(`A file named "${projectName}" already exists.`);
+      }
+      fs.mkdirSync(target, { recursive: true });
+      const workspace = setWorkspace(target);
+      // Notify the frontend so it switches to the new workspace.
+      return {
+        ok: true,
+        summary: `Created project ${projectName}`,
+        detail: `Project created at ${workspace}.`,
+        forModel: `OK: created and opened project "${projectName}" at ${workspace}. The workspace root is now ${workspace}; all file paths are relative to it. The folder is currently empty — create the files the user asked for.`,
+        change: null,
+        workspaceChanged: { workspace, name: path.basename(workspace), tree: workspaceTree(2, 200) },
+      };
+    }
+
+    if (tool === "open_project") {
+      const targetPath = String(argOf(args, ["path", "folder", "directory", "dir"]) || "").trim();
+      if (!targetPath) throw new Error("open_project needs a path.");
+      const resolved = path.resolve(targetPath);
+      if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+        throw new Error(`"${targetPath}" is not an existing folder.`);
+      }
+      const workspace = setWorkspace(resolved);
+      return {
+        ok: true,
+        summary: `Opened ${path.basename(workspace)}`,
+        detail: `Workspace set to ${workspace}.`,
+        forModel: `OK: opened project at ${workspace}. The workspace root is now ${workspace}; all file paths are relative to it.`,
+        change: null,
+        workspaceChanged: { workspace, name: path.basename(workspace), tree: workspaceTree(2, 200) },
+      };
+    }
+
     throw new Error(`Unknown tool "${tool}".`);
   }
 
@@ -1055,6 +1111,9 @@ RULES
             detail: truncate(result.detail || "", 4000),
           });
           if (result.change) changes.push(result.change);
+          if (result.workspaceChanged) {
+            send("workspace", result.workspaceChanged);
+          }
           conversation.push({
             role: "user",
             content: `TOOL RESULT — ${call.tool} — ${result.ok !== false ? "success" : "failed"}\n${truncate(result.forModel || result.detail || "", MAX_TOOL_RESULT_CHARS)}\n\nContinue the task. Call another tool if needed, otherwise give the final answer.`,
