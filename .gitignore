@@ -21,7 +21,9 @@ app/chat-history/
 app/transcriptions/
 app/tts-outputs/
 app/tts-cache/
-app/video/
+app/code-sessions/
+app/code-backups/
+app/code-workspace/
 
 # Dependencies and platform-specific copies
 **/node_modules/

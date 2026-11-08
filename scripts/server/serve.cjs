@@ -12,7 +12,7 @@ const path     = require("path");
 const { spawn, spawnSync, execSync, exec, execFile } = require("child_process");
 const { comprehensiveWebSearch } = require("../search/core");
 const { detectModelKindCached } = require("./model-kind.cjs");
-const createVideoFeature = require("./video.cjs");
+const createCodeFeature = require("./code.cjs");
 
 // HTTP keep-alive agent for llama-server (eliminates TCP handshake per request)
 const llmHttpAgent = new http.Agent({
@@ -2809,7 +2809,7 @@ function transcribeWavBuffer(buffer, options = {}) {
       // Dictation (the Voice screen's mic) only wants the text, not a saved transcript
       if (options.save === false) {
         speechError = null;
-        resolve({ text, model: model.filename, language, durationMs: Date.now() - startedAt, raw });
+        resolve({ text, model: model.filename, language, durationMs: Date.now() - startedAt });
         return;
       }
       const saved = saveTranscript({
@@ -6183,15 +6183,16 @@ function json(res, code, obj) {
 }
 
 // ── HTTP Server ───────────────────────────────────────────────────────────────
-const videoFeature = createVideoFeature({
+const codeFeature = createCodeFeature({
   ROOT,
-  TTS_OUTPUTS,
-  MIME,
   json,
   readJsonBody,
-  pathInside,
-  safeOutputName,
-  transcribeWavBuffer,
+  getLlmState: () => ({
+    ready: llmReady,
+    port: PORT_LLM,
+    model: llmSettings.model || "",
+    contextSize: llmSettings.contextSize || 0,
+  }),
 });
 
 const server = http.createServer(async (req, res) => {
@@ -7744,13 +7745,15 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     }
   }
 
-  // ── AI video editor ───────────────────────────────────────────────────────
-  try {
-    if (await videoFeature.handle(req, res)) return;
-  } catch (err) {
-    console.error("  [video] Request failed:", err);
-    if (!res.headersSent) json(res, err.statusCode || 500, { ok: false, error: err.message || "Video request failed." });
-    return;
+  // ── Code workspace (offline coding assistant) ─────────────────────────────
+  if (req.url.startsWith("/api/code/")) {
+    try {
+      return await codeFeature.handle(req, res);
+    } catch (err) {
+      console.error("  [code] Request failed:", err);
+      if (!res.headersSent) json(res, err.statusCode || 500, { ok: false, error: err.message || "Code request failed." });
+      return;
+    }
   }
 
   if (req.url.startsWith("/api/")) {

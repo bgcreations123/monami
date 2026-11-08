@@ -7,18 +7,20 @@ import Settings from "./components/Settings";
 import TextChat from "./components/TextChat";
 import SpeechTranscriber from "./components/SpeechTranscriber";
 import TextToSpeech from "./components/TextToSpeech";
-import VideoEditor from "./components/VideoEditor";
+import CodeStudio from "./components/CodeStudio";
 import { cleanupCandidates, formatBytes, getCleanupCandidates, getDiagnostics, getHardwareSpecs, getHealth, getTelemetry, getBackendOptions, getBackendStatus, listGeneratedOutputs, listLlmConversations, saveLlmConversation, deleteLlmConversation, listSpeechTranscriptions, deleteSpeechTranscription, listTtsOutputs, deleteTtsOutput } from "./services/api";
+import { listCodeSessions, deleteCodeSession } from "./services/codeApi";
 import "./App.css";
+import "./styles/code.css";
 
 // Screens live in the URL hash (#/chat, #/chat/<id>, #/images, ...) so a refresh
 // reopens the same screen and the browser's back/forward buttons work.
 const ROUTE_TO_TAB = {
   chat: "chat",
+  code: "code",
   images: "generator",
   transcribe: "speech",
   voice: "tts",
-  video: "video",
   models: "models",
   settings: "settings",
 };
@@ -284,6 +286,8 @@ function App() {
   const [selectedSpeechTranscript, setSelectedSpeechTranscript] = useState(null);
   const [ttsOutputs, setTtsOutputs] = useState([]);
   const [selectedTtsOutput, setSelectedTtsOutput] = useState(null);
+  const [codeSessions, setCodeSessions] = useState([]);
+  const [activeCodeSessionId, setActiveCodeSessionId] = useState(null);
 
   const sanitizeMessageForStorage = (message) => {
     if (!Array.isArray(message?.content)) return message;
@@ -455,6 +459,39 @@ function App() {
       setTtsOutputs([]);
     }
   }, []);
+
+  const refreshCodeSessions = useCallback(async () => {
+    try {
+      const list = await listCodeSessions();
+      setCodeSessions(list);
+    } catch (err) {
+      console.warn("Could not load code sessions:", err);
+      setCodeSessions([]);
+    }
+  }, []);
+
+  const handleDeleteCodeSession = useCallback(async (id, e) => {
+    if (e) e.stopPropagation();
+    const session = codeSessions.find((item) => item.id === id);
+    const ok = await showConfirm({
+      title: "Delete Code Session",
+      message: `Delete "${session?.title || "this code session"}"? Files in your project are not touched.`,
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteCodeSession(id);
+      setCodeSessions((prev) => prev.filter((item) => item.id !== id));
+      if (activeCodeSessionId === id) setActiveCodeSessionId(null);
+    } catch (err) {
+      showAlert({ title: "Delete Failed", message: err.message || String(err), danger: true });
+    }
+  }, [codeSessions, activeCodeSessionId, showConfirm, showAlert]);
+
+  useEffect(() => {
+    refreshCodeSessions();
+  }, [refreshCodeSessions]);
 
   const handleDeleteTtsOutput = useCallback(async (item, e) => {
     if (e) e.stopPropagation();
@@ -738,7 +775,7 @@ function App() {
 
   // The top bar only shows outside a running conversation, so chats get the full height
   const [chatInThread, setChatInThread] = useState(false);
-  const showTopBar = !(activeTab === "chat" && chatInThread);
+  const showTopBar = activeTab !== "code" && !(activeTab === "chat" && chatInThread);
 
   const sidebarContent = useMemo(() => (
     <Sidebar
@@ -757,8 +794,12 @@ function App() {
       selectedSpeechTranscript={selectedSpeechTranscript}
       setSelectedSpeechTranscript={setSelectedSpeechTranscript}
       onDeleteSpeechTranscription={handleDeleteSpeechTranscription}
+      codeSessions={codeSessions}
+      activeCodeSessionId={activeCodeSessionId}
+      setActiveCodeSessionId={setActiveCodeSessionId}
+      onDeleteCodeSession={handleDeleteCodeSession}
     />
-  ), [sidebarVisible, toggleSidebar, activeTab, openTabFromSidebar, specs, telemetry, handleNewChat, conversations, activeConversationId, handleDeleteConversation, speechTranscriptions, selectedSpeechTranscript, handleDeleteSpeechTranscription]);
+  ), [sidebarVisible, toggleSidebar, activeTab, openTabFromSidebar, specs, telemetry, handleNewChat, conversations, activeConversationId, handleDeleteConversation, speechTranscriptions, selectedSpeechTranscript, handleDeleteSpeechTranscription, codeSessions, activeCodeSessionId, handleDeleteCodeSession]);
 
   // The status bar unloads models itself; keep the screens' view in step. The picked image
   // model stays selected so the next generate loads it again.
@@ -807,6 +848,18 @@ function App() {
             showConfirm={showConfirm}
             specs={specs}
             textSettings={textSettings}
+          />
+        </div>
+
+        <div style={{ display: activeTab === "code" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
+          <CodeStudio
+            showAlert={showAlert}
+            showConfirm={showConfirm}
+            textSettings={textSettings}
+            activeSessionId={activeCodeSessionId}
+            setActiveSessionId={setActiveCodeSessionId}
+            onSessionsChanged={refreshCodeSessions}
+            onOpenModels={() => setActiveTab("models")}
           />
         </div>
 
@@ -871,13 +924,6 @@ function App() {
             onDeleteOutput={handleDeleteTtsOutput}
             ttsSettings={ttsSettings}
             setTtsSettings={setTtsSettings}
-          />
-        </div>
-
-        <div style={{ display: activeTab === "video" ? "flex" : "none", flex: 1, flexDirection: "column", overflow: "hidden" }}>
-          <VideoEditor
-            showAlert={showAlert}
-            showConfirm={showConfirm}
           />
         </div>
 

@@ -6,6 +6,7 @@ import {
   getLlmBackends,
   getLlmStats,
   getLlmStatus,
+  listLlmModels,
   benchmarkLlm,
   startLlm,
   stopLlm,
@@ -27,6 +28,7 @@ const SECTIONS = [
   { id: "appearance", label: "Appearance" },
   { id: "image", label: "Image generation" },
   { id: "text", label: "Text generation" },
+  { id: "code", label: "Code" },
   { id: "speech", label: "Speech" },
   { id: "tts", label: "Voice" },
 ];
@@ -216,6 +218,9 @@ function Settings({
   setFontSize,
 }) {
   const [llmStatus, setLlmStatus] = useState({ ready: false, settings: {} });
+  const [codeModels, setCodeModels] = useState([]);
+  const [selectedCodeModel, setSelectedCodeModel] = useState(() => localStorage.getItem("selectedLlmModel") || "");
+  const [codeLoadBusy, setCodeLoadBusy] = useState(false);
   const [llmBackends, setLlmBackends] = useState({ available: [], candidates: [] });
   const [llmStats, setLlmStats] = useState({ benchmarks: [] });
   const [benchmarkBusy, setBenchmarkBusy] = useState(false);
@@ -315,6 +320,17 @@ function Settings({
       cancelled = true;
       clearInterval(interval);
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const models = await listLlmModels();
+        if (!cancelled) setCodeModels(models);
+      } catch (_) {}
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const isSD15OrCustom = activeModel ? isSD15OrCustomModel(activeModel) : false;
@@ -1243,10 +1259,105 @@ function Settings({
     </>
   );
 
+  const handleLoadCodeModel = async () => {
+    if (!selectedCodeModel) {
+      showAlert({ title: "Pick a Model", message: "Choose an installed GGUF model first.", danger: true });
+      return;
+    }
+    setCodeLoadBusy(true);
+    try {
+      localStorage.setItem("selectedLlmModel", selectedCodeModel);
+      const options = {
+        threads: pendingTextSettings?.threads,
+        contextSize: Math.max(8192, Number(pendingTextSettings?.contextSize) || 0),
+        gpuLayers: pendingTextSettings?.gpuLayers ?? -1,
+        enableThinking: pendingTextSettings?.enableThinking === true,
+        flashAttn: pendingTextSettings?.flashAttn,
+        cacheTypeK: pendingTextSettings?.cacheTypeK,
+        cacheTypeV: pendingTextSettings?.cacheTypeV,
+        mlock: pendingTextSettings?.mlock,
+        mmap: pendingTextSettings?.mmap,
+        cachePrompt: pendingTextSettings?.cachePrompt,
+        defragThold: pendingTextSettings?.defragThold,
+        batchSize: pendingTextSettings?.batchSize,
+        ubatchSize: pendingTextSettings?.ubatchSize,
+        performanceProfile: pendingTextSettings?.performanceProfile,
+        preferredBackend: pendingTextSettings?.preferredBackend,
+      };
+      const result = await startLlm(selectedCodeModel, options);
+      setLlmStatus({ ready: true, settings: result.settings || {}, model: selectedCodeModel });
+      showAlert({ title: "Model Loaded", message: `${selectedCodeModel.replace(/\.gguf$/i, "")} is ready for coding.` });
+    } catch (err) {
+      showAlert({ title: "Load Failed", message: err.message || String(err), danger: true });
+    } finally {
+      setCodeLoadBusy(false);
+    }
+  };
+
+  const renderCodeSettings = () => {
+    const recommended = [
+      { name: "Qwen2.5-Coder-7B (balanced)", size: "4.7 GB", tier: "Mid/High" },
+      { name: "Qwen2.5-Coder-14B (stronger)", size: "9 GB", tier: "High" },
+      { name: "Qwen2.5-Coder-32B (best local)", size: "20 GB", tier: "High (32GB+ RAM)" },
+      { name: "DeepSeek-Coder-V2-Lite (MoE)", size: "9 GB", tier: "High" },
+      { name: "CodeLlama-34B-Instruct", size: "20 GB", tier: "High (32GB+ RAM)" },
+    ];
+    return (
+      <>
+        <HardwareSummary specs={specs} />
+        <div className="page-section-label settings-group-label">Model</div>
+        <ul className="row-list">
+          <SettingRow
+            title="Installed text models"
+            description={llmStatus.ready ? `Currently loaded: ${llmStatus.model || "—"}` : "No model loaded. Pick one below and load it."}
+          >
+            <select
+              className="settings-input"
+              value={selectedCodeModel}
+              onChange={(e) => setSelectedCodeModel(e.target.value)}
+            >
+              <option value="">Choose a model…</option>
+              {codeModels.map((model) => (
+                <option key={model.filename} value={model.filename}>
+                  {model.filename.replace(/\.gguf$/i, "")}
+                </option>
+              ))}
+            </select>
+          </SettingRow>
+          <SettingRow title="Load for coding" description="Loads the selected model into the shared text engine. The Code workspace uses it immediately.">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleLoadCodeModel}
+              disabled={codeLoadBusy || !selectedCodeModel}
+            >
+              {codeLoadBusy ? "Loading…" : "Load model"}
+            </button>
+          </SettingRow>
+        </ul>
+        <div className="page-section-label settings-group-label">Recommended powerful coding models</div>
+        <ul className="row-list">
+          {recommended.map((item) => (
+            <li key={item.name} className="row-item settings-row">
+              <div className="row-item-main">
+                <div className="row-item-title">{item.name}</div>
+                <div className="row-item-meta">{item.size} · {item.tier} tier</div>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <p className="row-item-meta" style={{ padding: "8px 4px" }}>
+          Download any of these from the <strong>Models</strong> tab (Model Manager → Text models), then load it here or in the Code workspace top bar. Code shares the same text model as Text Chat. For the strongest results, use a 14B+ coder model on a machine with 16GB+ RAM.
+        </p>
+      </>
+    );
+  };
+
   const renderSection = () => {
     switch (activeSection) {
       case "image": return renderImageSettings();
       case "text": return renderTextSettings();
+      case "code": return renderCodeSettings();
       case "speech": return renderSpeechSettings();
       case "tts": return renderTtsSettings();
       default: return renderAppearanceSettings();

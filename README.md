@@ -7,7 +7,7 @@
 <h1 align="center">Monami</h1>
 
 <p align="center">
-  <strong>A premium, zero-configuration Monami and offline GUI for Stable Diffusion (Image Generation), LLMs (Chat), Whisper (Speech-to-Text), and Kokoro (Text-to-Speech). Powered by hardware-accelerated GPU and NPU execution on Windows, Linux, and macOS.</strong>
+  <strong>A premium, zero-configuration Monami and offline GUI for Stable Diffusion (Image Generation), LLMs (Chat &amp; Coding), Whisper (Speech-to-Text), and Kokoro (Text-to-Speech). Powered by hardware-accelerated GPU and NPU execution on Windows, Linux, and macOS.</strong>
 </p>
 
 <p align="center">
@@ -84,11 +84,12 @@
 
 **Monami** is a completely offline, zero-setup, self-contained AI studio for Windows, Linux, and macOS. Unlike cloud-based AI systems, it runs entirely on your own hardware with no censorship, tracking, subscriptions, or login requirements.
 
-It unifies four major local AI capabilities into one high-performance desktop interface:
+It unifies five major local AI capabilities into one high-performance desktop interface:
 1. **🎨 Image Generation (Stable Diffusion):** Generate and edit high-quality images offline using `.safetensors`, `.gguf`, or `.ckpt` model weights.
 2. **💬 Text Chat (LLMs):** Converse privately with open-source language models (GGUF format) powered by official, high-performance `llama.cpp` backends.
-3. **🎙️ Speech-to-Text (Whisper):** Transcribe voice recordings and speech to text in real-time with an integrated `whisper.cpp` engine.
-4. **🗣️ Text-to-Speech (Kokoro TTS):** Convert text outputs into highly natural, lifelike vocal audio offline using the `Kokoro-82M` ONNX model.
+3. **🧑‍💻 Code Workspace (offline coding agent):** Open any project folder, browse and edit files, run commands, and let the local model read, write, and refactor code with a full undo history.
+4. **🎙️ Speech-to-Text (Whisper):** Transcribe voice recordings and speech to text in real-time with an integrated `whisper.cpp` engine.
+5. **🗣️ Text-to-Speech (Kokoro TTS):** Convert text outputs into highly natural, lifelike vocal audio offline using the `Kokoro-82M` ONNX model.
 
 ---
 
@@ -100,6 +101,7 @@ It unifies four major local AI capabilities into one high-performance desktop in
 *   **Integrated Model Manager:** Paste Hugging Face URLs to download weights directly, or drag-and-drop local weights to import them.
 *   **Live Performance Monitor:** Track CPU, RAM, GPU, and VRAM utilization in real-time directly inside the web UI.
 *   **Local Output Gallery:** Saves generated images side-by-side with prompt parameters and metadata JSON files.
+*   **Agentic Code Workspace:** A built-in code editor, file tree, terminal, and AI agent that edits real project files through sandboxed tools. Every write is backed up and can be undone from the Changes tab.
 
 ---
 
@@ -109,8 +111,34 @@ To avoid exhausting system RAM or VRAM, text and image engines are mutually excl
 
 *   **Image Generation Workspace:** Uses a dedicated `stable-diffusion.cpp` backend node. Model weights are stored in `app/models/`.
 *   **Text Chat Workspace:** Uses a portable `llama.cpp` server backend. Model weights (.gguf) are stored in `app/llm-models/`. A small Qwen2.5 Coder starter model can be downloaded directly from the Text Chat panel.
+*   **Code Workspace:** Reuses the same local `llama.cpp` model to drive an agent that reads, searches, writes, and edits files inside the project folder you open. Tools are sandboxed to that folder, changes are backed up to `app/code-backups/`, and command execution is opt-in. Nothing is sent over the network.
 *   **Speech Worker (Whisper):** Runs a localized `whisper-cli` process to convert your vocal input to text.
 *   **Audio Output (Kokoro TTS):** Utilizes `kokoro-js` locally on the server side to read responses in natural voices.
+
+### Using the Code workspace
+
+1.  Open **Code** in the sidebar and choose **Open folder…** to pick any project on your machine.
+2.  Load a GGUF model from the selector in the top bar (the same model used by Text Chat). If you have none yet, use **Get a model** or the Model Manager.
+3.  Ask for a change in the assistant panel. The model can list, read, search, create, edit, rename, and delete files, and it can run commands when you enable that switch.
+4.  Review every edit in the **Changes** tab. Each change stores a backup, shows a line diff, and can be undone with one click.
+5.  Use the built-in terminal (`Ctrl+J`) for builds and tests, and `Ctrl+P` to jump to a file.
+
+Nothing is uploaded. Paths are sandboxed to the folder you opened, generated folders such as `node_modules` and `.git` are protected, and command execution is off until you turn it on.
+
+### Recommended models for coding
+
+Monami runs fully offline on `llama.cpp`, so it uses open-weight GGUF models rather than cloud services. For the best coding results, download one of these from **Models → Text models** and load it in **Settings → Code** or the Code workspace top bar:
+
+| Model | Size | Tier | Notes |
+|---|---|---|---|
+| Qwen2.5-Coder 0.5B | 0.5 GB | Low | Fast, for low-RAM machines |
+| Qwen2.5-Coder 7B | 4.7 GB | Mid/High | Good default |
+| Qwen2.5-Coder 14B | 9 GB | High | Stronger, best balance |
+| Qwen2.5-Coder 32B | 20 GB | High (32GB+ RAM) | Closest to Claude/ChatGPT quality offline |
+| DeepSeek-Coder-V2-Lite | 9.2 GB | High | MoE, strong reasoning |
+| CodeLlama-34B-Instruct | 20 GB | High (32GB+ RAM) | Meta's coding model |
+
+A 14B+ coder model on 16GB+ RAM gives noticeably better multi-file edits and tool use. Nothing leaves your machine.
 
 ---
 
@@ -146,6 +174,7 @@ Known-good image models available from the Model Manager:
 | Workspace | Supported model files | Put files in | Notes |
 | :--- | :--- | :--- | :--- |
 | Text Chat | `.gguf` llama.cpp models | `app/llm-models/` | Use single-file GGUF chat/instruct models. Vision models may also require a matching `mmproj` file. |
+| Code Workspace | The same `.gguf` models as Text Chat | `app/llm-models/` | Coder-tuned instruct models work best. Load one model and both Chat and Code can use it. |
 | Speech-to-Text | whisper.cpp `.bin` models | `app/speech-models/` | Use Whisper GGML/whisper.cpp model files. |
 | Text-to-Speech | Kokoro `.json` manifests and model assets | `app/tts-models/` / `app/tts-runtime/` | Use the built-in Kokoro setup and Model Manager entries. |
 
@@ -175,6 +204,8 @@ Portable-AI-Studio/
     ├── frontend/              # UI source code (Vite + React)
     ├── models/                # Place image weights here (.safetensors, .gguf, .ckpt)
     ├── llm-models/            # Place text GGUF weights here
+    ├── code-sessions/         # Saved Code workspace conversations
+    ├── code-backups/          # Undo history and backups for file edits
     └── outputs/               # Saved images and parameters metadata
 ```
 
