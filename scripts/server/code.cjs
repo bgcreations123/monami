@@ -9,6 +9,7 @@ const fs = require("fs");
 const fsp = fs.promises;
 const path = require("path");
 const http = require("http");
+const os = require("os");
 const { spawn } = require("child_process");
 
 const MAX_READ_BYTES = 512 * 1024;        // read_file cap for the model
@@ -1133,11 +1134,40 @@ RULES
     }
 
     if (route === "/api/code/pick-workspace" && req.method === "POST") {
-      const picked = await pickFolder();
+      const body = await readJsonBody(req, res);
+      const picked = await pickFolder(body?.title);
       if (!picked) return json(res, 200, { ok: true, cancelled: true });
       try {
         const workspace = setWorkspace(picked);
         return json(res, 200, { ok: true, workspace, name: path.basename(workspace), tree: workspaceTree(2, 200) });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+
+    if (route === "/api/code/create-workspace" && req.method === "POST") {
+      const body = await readJsonBody(req, res);
+      if (!body) return;
+      try {
+        const name = String(body.name || "").trim();
+        if (!name) throw new Error("Project name is required.");
+        if (/[\\/]/.test(name) || name === "." || name === "..") throw new Error("Project name cannot contain slashes or be empty.");
+        if (/[<>:\"|?*]/.test(name)) throw new Error("Project name contains invalid characters.");
+        const parent = body.parent ? path.resolve(String(body.parent)) : "";
+        if (parent && (!fs.existsSync(parent) || !fs.statSync(parent).isDirectory())) {
+          throw new Error("The chosen location does not exist or is not a folder.");
+        }
+        const baseParent = parent || path.join(os.homedir(), "Documents", "Monami Projects");
+        fs.mkdirSync(baseParent, { recursive: true });
+        const target = path.join(baseParent, name);
+        if (fs.existsSync(target)) {
+          if (!fs.statSync(target).isDirectory()) throw new Error("A file with that name already exists.");
+          // reopen existing
+        } else {
+          fs.mkdirSync(target, { recursive: true });
+        }
+        const workspace = setWorkspace(target);
+        return json(res, 200, { ok: true, workspace, name: path.basename(workspace), parent: baseParent, tree: workspaceTree(2, 200) });
       } catch (error) {
         return json(res, 400, { ok: false, error: error.message });
       }
@@ -1456,16 +1486,17 @@ RULES
   }
 
   // ── native folder picker ───────────────────────────────────────────────────
-  function pickFolder() {
+  function pickFolder(title) {
     return new Promise((resolve) => {
       let command;
       let args;
       if (process.platform === "win32") {
         command = "powershell";
+        const description = title || "Choose a project folder for Monami Code";
         args = ["-NoProfile", "-STA", "-Command", [
           "Add-Type -AssemblyName System.Windows.Forms",
           "$d = New-Object System.Windows.Forms.FolderBrowserDialog",
-          "$d.Description = 'Choose a project folder for Monami Code'",
+          `$d.Description = '${description.replace(/'/g, "''")}'`,
           "$d.ShowNewFolderButton = $true",
           "$f = New-Object System.Windows.Forms.Form -Property @{TopMost = $true}",
           "if ($d.ShowDialog($f) -eq 'OK') { [Console]::Out.Write($d.SelectedPath) }",

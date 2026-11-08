@@ -11,7 +11,7 @@ import CodeChat from "./code/CodeChat";
 import TerminalPanel from "./code/TerminalPanel";
 import DiffView from "./code/DiffView";
 import {
-  getCodeState, openCodeWorkspace, pickCodeWorkspace, getCodeTree,
+  getCodeState, openCodeWorkspace, pickCodeWorkspace, createCodeWorkspace, getCodeTree,
   readCodeFile, writeCodeFile, createCodeEntry, deleteCodeEntry, renameCodeEntry,
   searchCode, runCodeCommand, getCodeChanges, revertCodeChange, clearCodeChanges,
   listCodeSessions, getCodeSession, saveCodeSession, deleteCodeSession,
@@ -295,6 +295,31 @@ export default function CodeStudio({
       showAlert?.({ title: "Could Not Open Folder", message: err.message || String(err), danger: true });
     }
   }, [applyWorkspace, resetWorkspaceView, showAlert]);
+
+  const handleNewProject = useCallback(async () => {
+    const name = await askText({
+      title: "New project",
+      label: "Project name",
+      value: "my-project",
+      placeholder: "my-project",
+      confirmLabel: "Create",
+    });
+    if (!name) return;
+    // Let the user choose where to create it; default to Documents/Monami Projects if cancelled.
+    let parent = "";
+    try {
+      const picked = await pickCodeWorkspace("Choose where to create the new project");
+      if (!picked?.cancelled) parent = picked?.workspace || "";
+    } catch (_) {}
+    try {
+      const data = await createCodeWorkspace(name, parent);
+      resetWorkspaceView();
+      applyWorkspace(data);
+      showAlert?.({ title: "Project created", message: `Created ${data.workspace}` });
+    } catch (err) {
+      showAlert?.({ title: "Could Not Create Project", message: err.message || String(err), danger: true });
+    }
+  }, [applyWorkspace, askText, resetWorkspaceView, showAlert]);
 
   // ── model actions ──────────────────────────────────────────────────────────
   const buildStartOptions = () => ({
@@ -916,6 +941,9 @@ export default function CodeStudio({
                   <button type="button" className="code-workspace-item primary" onClick={handleOpenFolder}>
                     <FolderOpen size={15} /> Open folder…
                   </button>
+                  <button type="button" className="code-workspace-item" onClick={handleNewProject}>
+                    <Sparkles size={15} /> New project…
+                  </button>
                   {recentWorkspaces.length > 0 && <div className="code-menu-label">Recent</div>}
                   {recentWorkspaces.map((folder) => (
                     <button
@@ -1038,10 +1066,15 @@ export default function CodeStudio({
                 <div className="code-explorer-empty">
                   <FolderPlus size={26} />
                   <h4>No project open</h4>
-                  <p>Open a folder to browse and edit its files.</p>
-                  <button type="button" className="code-primary-btn" onClick={handleOpenFolder}>
-                    <FolderOpen size={15} /> Open folder
-                  </button>
+                  <p>Open a folder or create a new project to start coding.</p>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                    <button type="button" className="code-primary-btn" onClick={handleOpenFolder}>
+                      <FolderOpen size={15} /> Open folder
+                    </button>
+                    <button type="button" className="code-primary-btn" onClick={handleNewProject}>
+                      <Sparkles size={15} /> New project
+                    </button>
+                  </div>
                 </div>
               )
             )}

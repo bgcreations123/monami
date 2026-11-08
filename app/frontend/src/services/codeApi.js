@@ -32,8 +32,12 @@ export async function openCodeWorkspace(folder) {
   return post("/api/code/workspace", { path: folder }, "Could not open that folder.");
 }
 
-export async function pickCodeWorkspace() {
-  return post("/api/code/pick-workspace", {}, "Could not open the folder picker.");
+export async function pickCodeWorkspace(title) {
+  return post("/api/code/pick-workspace", { title }, "Could not open the folder picker.");
+}
+
+export async function createCodeWorkspace(name, parent) {
+  return post("/api/code/create-workspace", { name, parent }, "Could not create that project.");
 }
 
 export async function getCodeTree(relativePath = ".") {
