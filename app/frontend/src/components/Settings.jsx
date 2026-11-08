@@ -12,6 +12,7 @@ import {
   stopLlm,
   downloadBackend,
   getDownloadProgress,
+  downloadLlmModel,
   getBackendOptions,
 } from "../services/api";
 import { THEMES } from "../themes";
