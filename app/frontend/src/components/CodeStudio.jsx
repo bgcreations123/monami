@@ -296,35 +296,6 @@ export default function CodeStudio({
     }
   }, [applyWorkspace, resetWorkspaceView, showAlert]);
 
-  const handleOpenByPath = useCallback(async () => {
-    const value = await askText({
-      title: "Open by path",
-      label: "Folder or file path",
-      placeholder: "C:\\Users\\you\\project  or  C:\\Users\\you\\file.js",
-      confirmLabel: "Open",
-    });
-    if (!value) return;
-    const trimmed = value.trim().replace(/^["']|["']$/g, "");
-    try {
-      const isFile = /\.[a-zA-Z0-9]{1,8}$/.test(trimmed) && !/[\\/]$/.test(trimmed);
-      let folder = trimmed;
-      let fileToOpen = null;
-      if (isFile) {
-        const idx = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
-        if (idx > 0) { folder = trimmed.slice(0, idx); fileToOpen = trimmed.slice(idx + 1); }
-      }
-      const data = await openCodeWorkspace(folder);
-      resetWorkspaceView();
-      applyWorkspace(data);
-      if (fileToOpen) {
-        const rel = fileToOpen.replace(/\\/g, "/");
-        try { await openFile(rel); } catch (_) {}
-      }
-    } catch (err) {
-      showAlert?.({ title: "Could Not Open Path", message: err.message || String(err), danger: true });
-    }
-  }, [applyWorkspace, askText, openFile, resetWorkspaceView, showAlert]);
-
   const handleNewProject = useCallback(async () => {
     const name = await askText({
       title: "New project",
@@ -510,6 +481,35 @@ export default function CodeStudio({
       showAlert?.({ title: "Could Not Open File", message: err.message || String(err), danger: true });
     }
   }, [tabs, showAlert]);
+
+  const handleOpenByPath = useCallback(async () => {
+    const value = await askText({
+      title: "Open by path",
+      label: "Folder or file path",
+      placeholder: "C:\\Users\\you\\project  or  C:\\Users\\you\\file.js",
+      confirmLabel: "Open",
+    });
+    if (!value) return;
+    const trimmed = value.trim().replace(/^["']|["']$/g, "");
+    try {
+      const isFile = /\.[a-zA-Z0-9]{1,8}$/.test(trimmed) && !/[\\/]$/.test(trimmed);
+      let folder = trimmed;
+      let fileToOpen = null;
+      if (isFile) {
+        const idx = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
+        if (idx > 0) { folder = trimmed.slice(0, idx); fileToOpen = trimmed.slice(idx + 1); }
+      }
+      const data = await openCodeWorkspace(folder);
+      resetWorkspaceView();
+      applyWorkspace(data);
+      if (fileToOpen) {
+        const rel = fileToOpen.replace(/\\/g, "/");
+        try { await openFile(rel); } catch (_) {}
+      }
+    } catch (err) {
+      showAlert?.({ title: "Could Not Open Path", message: err.message || String(err), danger: true });
+    }
+  }, [applyWorkspace, askText, openFile, resetWorkspaceView, showAlert]);
 
   const activeTab = useMemo(() => tabs.find((tab) => tab.path === activePath) || null, [tabs, activePath]);
 
