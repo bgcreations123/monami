@@ -201,6 +201,12 @@ export default function CodeChat({
   ready,
   modelReady = ready,
   modelLabel,
+  models = [],
+  selectedModel = "",
+  onSelectModel,
+  onLoadModel,
+  loadingModel = "",
+  onOpenModels,
   activeFile,
   includeFile,
   setIncludeFile,
@@ -325,8 +331,46 @@ export default function CodeChat({
             <h3>Build something in {workspaceName || "your project"}</h3>
             <p>I can read your files, write code, and run checks — all on this machine, with no internet.</p>
             {!ready && (
-              <div className="code-chat-home-hint">
-                <strong>No model loaded.</strong> Pick one from the menu at the top of this screen, or open <em>Settings → Code</em> / <em>Models</em> to download a powerful coding model (Qwen2.5-Coder, DeepSeek-Coder, CodeLlama).
+              <div className="code-chat-model-card">
+                <div className="code-chat-model-card-title">Load a model to start coding</div>
+                <div className="code-chat-model-card-row">
+                  <select
+                    className="code-chat-model-select"
+                    value={selectedModel}
+                    onChange={(e) => onSelectModel?.(e.target.value)}
+                    aria-label="Select a coding model"
+                  >
+                    <option value="">
+                      {models.length ? "Choose an installed model…" : "No models installed"}
+                    </option>
+                    {models.map((model) => (
+                      <option key={model.filename} value={model.filename}>
+                        {model.filename.replace(/\.gguf$/i, "")}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="code-chat-model-load"
+                    onClick={() => onLoadModel?.(selectedModel)}
+                    disabled={loadingModel || !selectedModel}
+                  >
+                    {loadingModel ? "Loading…" : "Load"}
+                  </button>
+                </div>
+                <div className="code-chat-model-card-actions">
+                  <button
+                    type="button"
+                    className="code-chat-model-link"
+                    onClick={onOpenModels}
+                    disabled={!onOpenModels}
+                  >
+                    Download more models…
+                  </button>
+                </div>
+                <p className="code-chat-model-card-note">
+                  Code shares the text model. For the best results use a 14B+ coder model (Qwen2.5-Coder, DeepSeek-Coder, CodeLlama) on 16GB+ RAM.
+                </p>
               </div>
             )}
             <div className="code-chat-suggestions">

@@ -1211,6 +1211,12 @@ export default function CodeStudio({
             ready={ready}
             modelReady={llmStatus.ready}
             modelLabel={modelLabel}
+            models={models}
+            selectedModel={selectedModel}
+            onSelectModel={setSelectedModel}
+            onLoadModel={handleLoadModel}
+            loadingModel={loadingModel}
+            onOpenModels={() => setActiveTab("models")}
             activeFile={activePath}
             includeFile={includeFile}
             setIncludeFile={setIncludeFile}
