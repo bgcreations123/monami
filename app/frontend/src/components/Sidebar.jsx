@@ -1,5 +1,5 @@
 import React, { memo, useMemo, useRef, useState, useEffect } from "react";
-import { Image, Box, Mic, Settings, Trash2, AudioLines, SquarePen, PanelLeftClose, Search, X, ChevronRight, Code2 } from "lucide-react";
+import { Image, Box, Mic, Settings, Trash2, AudioLines, SquarePen, PanelLeftClose, Search, X, ChevronRight } from "lucide-react";
 import BrandMark from "./BrandMark";
 
 const SIDEBAR_MIN = 200;
@@ -147,10 +147,6 @@ function Sidebar({
   selectedSpeechTranscript,
   setSelectedSpeechTranscript,
   onDeleteSpeechTranscription,
-  codeSessions = [],
-  activeCodeSessionId,
-  setActiveCodeSessionId,
-  onDeleteCodeSession,
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -250,29 +246,15 @@ function Sidebar({
 
     return [
       { id: "chats", label: "Chats", items: chats.filter(matches).sort(newestFirst) },
-      { id: "code", label: "Code sessions", items: codeSessions.map((session) => ({
-        key: `code:${session.id}`,
-        title: session.title || "Code session",
-        time: toTime(session.timestamp),
-        isActive: activeTab === "code" && activeCodeSessionId === session.id,
-        open: () => {
-          setActiveCodeSessionId?.(session.id);
-          setActiveTab("code");
-        },
-        remove: (e) => onDeleteCodeSession?.(session.id, e),
-        deleteLabel: "Delete code session",
-      })).filter(matches).sort(newestFirst) },
       { id: "transcriptions", label: "Transcriptions", items: transcripts.filter(matches).sort(newestFirst) },
     ];
   }, [
-    query, conversations, speechTranscriptions, codeSessions, activeTab, activeConversationId,
-    selectedSpeechTranscript, setActiveTab, setActiveConversationId, activeCodeSessionId,
-    setActiveCodeSessionId, onDeleteCodeSession,
+    query, conversations, speechTranscriptions, activeTab, activeConversationId,
+    selectedSpeechTranscript, setActiveTab, setActiveConversationId,
     setSelectedSpeechTranscript, onDeleteConversation, onDeleteSpeechTranscription
   ]);
 
   const navItems = [
-    { tab: "code", label: "Code", Icon: Code2 },
     { tab: "generator", label: "Images", Icon: Image },
     { tab: "speech", label: "Transcribe", Icon: Mic },
     { tab: "tts", label: "Voice", Icon: AudioLines },

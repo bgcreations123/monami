@@ -6,14 +6,10 @@ import {
   getLlmBackends,
   getLlmStats,
   getLlmStatus,
-  listLlmModels,
   benchmarkLlm,
   startLlm,
   stopLlm,
   downloadBackend,
-  getBackendStatus,
-  getDownloadProgress,
-  downloadLlmModel,
   getBackendOptions,
 } from "../services/api";
 import { THEMES } from "../themes";
@@ -30,7 +26,6 @@ const SECTIONS = [
   { id: "appearance", label: "Appearance" },
   { id: "image", label: "Image generation" },
   { id: "text", label: "Text generation" },
-  { id: "code", label: "Code" },
   { id: "speech", label: "Speech" },
   { id: "tts", label: "Voice" },
 ];
@@ -220,19 +215,6 @@ function Settings({
   setFontSize,
 }) {
   const [llmStatus, setLlmStatus] = useState({ ready: false, settings: {} });
-  const [codeModels, setCodeModels] = useState([]);
-  const [selectedCodeModel, setSelectedCodeModel] = useState(() => localStorage.getItem("selectedLlmModel") || "");
-  const [codeLoadBusy, setCodeLoadBusy] = useState(false);
-  const [codeDownloading, setCodeDownloading] = useState(null); // filename being downloaded
-  const [codeDownloadProgress, setCodeDownloadProgress] = useState(0);
-  const [codeDownloadSpeed, setCodeDownloadSpeed] = useState("");
-  const codeDownloadPollRef = useRef(null);
-  const refreshCodeModels = useCallback(async () => {
-    try {
-      const models = await listLlmModels();
-      setCodeModels(models);
-    } catch (_) {}
-  }, []);
   const [llmBackends, setLlmBackends] = useState({ available: [], candidates: [] });
   const [llmStats, setLlmStats] = useState({ benchmarks: [] });
   const [benchmarkBusy, setBenchmarkBusy] = useState(false);
@@ -345,17 +327,6 @@ function Settings({
     return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => {
-    if (activeSection === "code") {
-      refreshCodeModels();
-    }
-  }, [activeSection, refreshCodeModels]);
-
-  useEffect(() => {
-    return () => {
-      if (codeDownloadPollRef.current) clearInterval(codeDownloadPollRef.current);
-    };
-  }, []);
   const isOpenVinoNpu = constraints.backendType === "openvino-npu";
   const supportsThinking = Boolean(llmStatus.ready && llmStatus.settings?.supportsThinking);
   const availableBackends = backendOptions?.options?.length
@@ -1281,194 +1252,10 @@ function Settings({
     </>
   );
 
-  const CODING_MODELS = [
-    { name: "Qwen2.5-Coder 0.5B", filename: "qwen2.5-coder-0.5b-instruct-q4_k_m.gguf", size: "0.5 GB", tier: "Low", url: "https://huggingface.co/Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf" },
-    { name: "Qwen2.5-Coder 7B", filename: "qwen2.5-coder-7b-instruct-q4_k_m.gguf", size: "4.7 GB", tier: "Mid / High", url: "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf" },
-    { name: "Qwen2.5-Coder 14B", filename: "qwen2.5-coder-14b-instruct-q4_k_m.gguf", size: "9.0 GB", tier: "High", url: "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct-GGUF/resolve/main/qwen2.5-coder-14b-instruct-q4_k_m.gguf" },
-    { name: "Qwen2.5-Coder 32B", filename: "qwen2.5-coder-32b-instruct-q4_k_m.gguf", size: "19.9 GB", tier: "High (32GB+ RAM)", url: "https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct-GGUF/resolve/main/qwen2.5-coder-32b-instruct-q4_k_m.gguf" },
-    { name: "DeepSeek-Coder-V2-Lite", filename: "DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf", size: "9.2 GB", tier: "High", url: "https://huggingface.co/bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF/resolve/main/DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf" },
-    { name: "CodeLlama-34B-Instruct", filename: "codellama-34b-instruct.Q4_K_M.gguf", size: "19.9 GB", tier: "High (32GB+ RAM)", url: "https://huggingface.co/TheBloke/CodeLlama-34B-Instruct-GGUF/resolve/main/codellama-34b-instruct.Q4_K_M.gguf" },
-    { name: "Llama-3.1 8B", filename: "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf", size: "4.9 GB", tier: "High", url: "https://huggingface.co/lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf" },
-  ];
-
-  const handleLoadCodeModel = async (filename) => {
-    if (!filename) return;
-    setCodeLoadBusy(true);
-    setSelectedCodeModel(filename);
-    try {
-      const imageStatus = await getBackendStatus().catch(() => null);
-      const imageModel = imageStatus?.ready && imageStatus.settings?.model
-        ? String(imageStatus.settings.model).split(/[\\/]/).pop().replace(/\.(safetensors|ckpt|gguf)$/i, "")
-        : null;
-      if (imageModel) {
-        const confirmed = await showConfirm?.({
-          title: "Unload the image model?",
-          message: `${imageModel} is loaded for images. Monami can only keep one large model in memory, so it will be unloaded to load ${filename.replace(/\.gguf$/i, "")}.`,
-          confirmLabel: "Unload and load",
-        });
-        if (!confirmed) { setCodeLoadBusy(false); return; }
-        await stopServer().catch(() => {});
-      }
-      localStorage.setItem("selectedLlmModel", filename);
-      const options = {
-        threads: pendingTextSettings?.threads,
-        contextSize: Math.max(8192, Number(pendingTextSettings?.contextSize) || 0),
-        gpuLayers: pendingTextSettings?.gpuLayers ?? -1,
-        enableThinking: pendingTextSettings?.enableThinking === true,
-        flashAttn: pendingTextSettings?.flashAttn,
-        cacheTypeK: pendingTextSettings?.cacheTypeK,
-        cacheTypeV: pendingTextSettings?.cacheTypeV,
-        mlock: pendingTextSettings?.mlock,
-        mmap: pendingTextSettings?.mmap,
-        cachePrompt: pendingTextSettings?.cachePrompt,
-        defragThold: pendingTextSettings?.defragThold,
-        batchSize: pendingTextSettings?.batchSize,
-        ubatchSize: pendingTextSettings?.ubatchSize,
-        performanceProfile: pendingTextSettings?.performanceProfile,
-        preferredBackend: pendingTextSettings?.preferredBackend,
-      };
-      const result = await startLlm(filename, options);
-      setLlmStatus({ ready: true, settings: result.settings || {}, model: filename });
-    } catch (err) {
-      showAlert({ title: "Load Failed", message: err.message || String(err), danger: true });
-    } finally {
-      setCodeLoadBusy(false);
-    }
-  };
-
-  const handleDownloadCodeModel = async (model) => {
-    if (codeDownloading) return;
-    setCodeDownloading(model.filename);
-    setCodeDownloadProgress(0);
-    setCodeDownloadSpeed("");
-    try {
-      await downloadLlmModel(model.url, model.filename);
-      // poll progress
-      if (codeDownloadPollRef.current) clearInterval(codeDownloadPollRef.current);
-      codeDownloadPollRef.current = setInterval(async () => {
-        try {
-          const status = await getDownloadProgress();
-          if (status.active) {
-            setCodeDownloadProgress(status.progress === -1 ? 0 : status.progress);
-            setCodeDownloadSpeed(`${status.speed || ""} ${status.eta ? "• ETA " + status.eta + "s" : ""}`.trim());
-          } else {
-            clearInterval(codeDownloadPollRef.current);
-            codeDownloadPollRef.current = null;
-            setCodeDownloading(null);
-            if (status.error) {
-              if (!String(status.error).toLowerCase().includes("cancelled")) {
-                showAlert({ title: "Download Failed", message: status.error, danger: true });
-              }
-            } else {
-              await refreshCodeModels();
-              // auto-load after download
-              await handleLoadCodeModel(model.filename);
-            }
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      }, 1000);
-    } catch (err) {
-      setCodeDownloading(null);
-      showAlert({ title: "Download Failed", message: err.message || String(err), danger: true });
-    }
-  };
-
-  const renderCodeSettings = () => {
-    const installedLower = new Map(codeModels.map((m) => [String(m.filename).toLowerCase(), m.filename]));
-    const merged = CODING_MODELS.map((m) => {
-      const realFilename = installedLower.get(m.filename.toLowerCase()) || m.filename;
-      return { ...m, filename: realFilename, installed: installedLower.has(m.filename.toLowerCase()) };
-    });
-    // also include any installed model not in the recommended list
-    for (const m of codeModels) {
-      if (!CODING_MODELS.some((c) => c.filename.toLowerCase() === String(m.filename).toLowerCase())) {
-        merged.push({ name: m.filename.replace(/\.gguf$/i, ""), filename: m.filename, size: "—", tier: "Installed", url: "", installed: true });
-      }
-    }
-    const loadedName = llmStatus.ready ? (llmStatus.model || "") : "";
-
-    return (
-      <>
-        <HardwareSummary specs={specs} />
-
-        <div className="code-settings-hero">
-          <div className="code-settings-hero-mark">{"</>"}</div>
-          <div className="code-settings-hero-text">
-            <h3>Code model</h3>
-            <p>
-              {loadedName
-                ? <>Currently loaded: <strong>{loadedName.replace(/\.gguf$/i, "")}</strong>. The Code workspace and Text Chat both use this model.</>
-                : "No model loaded yet. Pick one below — download it if needed, then load it. Everything runs offline on this machine."}
-            </p>
-          </div>
-        </div>
-
-        <div className="page-section-label settings-group-label">Available coding models</div>
-        <div className="code-model-grid">
-          {merged.map((model) => {
-            const isLoaded = loadedName.toLowerCase() === model.filename.toLowerCase();
-            const isDownloading = codeDownloading === model.filename;
-            return (
-              <div key={model.filename} className={`code-model-card ${isLoaded ? "loaded" : ""}`}>
-                <div className="code-model-card-head">
-                  <div className="code-model-card-name">{model.name}</div>
-                  {isLoaded && <span className="code-model-card-badge loaded">Loaded</span>}
-                  {!isLoaded && model.installed && <span className="code-model-card-badge installed">Installed</span>}
-                  {!isLoaded && !model.installed && <span className="code-model-card-badge">Not installed</span>}
-                </div>
-                <div className="code-model-card-meta">
-                  <span>{model.size}</span>
-                  <span className="code-model-card-dot">·</span>
-                  <span>{model.tier}</span>
-                </div>
-                {isDownloading && (
-                  <div className="code-model-card-progress">
-                    <div className="code-model-card-progress-bar" style={{ width: `${codeDownloadProgress}%` }} />
-                    <span>{codeDownloadProgress}% {codeDownloadSpeed}</span>
-                  </div>
-                )}
-                <div className="code-model-card-actions">
-                  {isLoaded ? (
-                    <button type="button" className="code-model-card-btn secondary" disabled>Active</button>
-                  ) : model.installed ? (
-                    <button
-                      type="button"
-                      className="code-model-card-btn primary"
-                      onClick={() => handleLoadCodeModel(model.filename)}
-                      disabled={codeLoadBusy || codeDownloading !== null}
-                    >
-                      {codeLoadBusy && selectedCodeModel === model.filename ? "Loading…" : "Load"}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="code-model-card-btn download"
-                      onClick={() => handleDownloadCodeModel(model)}
-                      disabled={codeDownloading !== null}
-                    >
-                      {isDownloading ? "Downloading…" : "Download"}
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <p className="row-item-meta" style={{ padding: "8px 4px", marginTop: 8 }}>
-          Downloads run in the background and the model loads automatically when finished. Models are stored in <code>app/llm-models/</code>. For the strongest results use a 14B+ coder model on a machine with 16GB+ RAM. Nothing leaves your machine.
-        </p>
-      </>
-    );
-  };
-
   const renderSection = () => {
     switch (activeSection) {
       case "image": return renderImageSettings();
       case "text": return renderTextSettings();
-      case "code": return renderCodeSettings();
       case "speech": return renderSpeechSettings();
       case "tts": return renderTtsSettings();
       default: return renderAppearanceSettings();

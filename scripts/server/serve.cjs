@@ -12,7 +12,6 @@ const path     = require("path");
 const { spawn, spawnSync, execSync, exec, execFile } = require("child_process");
 const { comprehensiveWebSearch } = require("../search/core");
 const { detectModelKindCached } = require("./model-kind.cjs");
-const createCodeFeature = require("./code.cjs");
 
 // HTTP keep-alive agent for llama-server (eliminates TCP handshake per request)
 const llmHttpAgent = new http.Agent({
@@ -6183,18 +6182,6 @@ function json(res, code, obj) {
 }
 
 // ── HTTP Server ───────────────────────────────────────────────────────────────
-const codeFeature = createCodeFeature({
-  ROOT,
-  json,
-  readJsonBody,
-  getLlmState: () => ({
-    ready: llmReady,
-    port: PORT_LLM,
-    model: llmSettings.model || "",
-    contextSize: llmSettings.contextSize || 0,
-  }),
-});
-
 const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -7742,17 +7729,6 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     } catch (err) {
       console.error(`  [api] Failed to delete model ${safeFilename}:`, err);
       return json(res, 500, { error: err.message });
-    }
-  }
-
-  // ── Code workspace (offline coding assistant) ─────────────────────────────
-  if (req.url.startsWith("/api/code/")) {
-    try {
-      return await codeFeature.handle(req, res);
-    } catch (err) {
-      console.error("  [code] Request failed:", err);
-      if (!res.headersSent) json(res, err.statusCode || 500, { ok: false, error: err.message || "Code request failed." });
-      return;
     }
   }
 
