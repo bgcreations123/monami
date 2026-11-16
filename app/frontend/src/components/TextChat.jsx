@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { LoaderCircle, Trash2, Square, X, ChevronDown, Globe2, Plus, PenLine, Lightbulb, Zap, FileText, ArrowUp, Brain, Mic, AudioLines, Image as ImageIcon, PanelLeft } from "lucide-react";
+import { LoaderCircle, Trash2, Square, X, ChevronDown, Globe2, Plus, PenLine, Lightbulb, Zap, FileText, ArrowUp, Brain, Mic, AudioLines, Image as ImageIcon, PanelLeft, MoreVertical } from "lucide-react";
 import {
   getBackendStatus,
   stopServer,
@@ -168,6 +168,19 @@ function TextChat({
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const [showThreadMenu, setShowThreadMenu] = useState(false);
+  const threadMenuRef = useRef(null);
+
+  useEffect(() => {
+    function handleThreadClickOutside(event) {
+      if (threadMenuRef.current && !threadMenuRef.current.contains(event.target)) {
+        setShowThreadMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleThreadClickOutside);
+    return () => document.removeEventListener("mousedown", handleThreadClickOutside);
   }, []);
 
   const estimateTokens = (text) => {
@@ -903,9 +916,6 @@ function TextChat({
   const modelLabel = status.ready && status.settings?.model
     ? status.settings.model.replace(/\.gguf$/i, "")
     : "Select model";
-  const contextMax = status.settings?.contextSize || 4096;
-  const contextUsed = tokenUsage.total_tokens || 0;
-  const contextPercent = Math.min(100, Math.round((contextUsed / contextMax) * 100));
   const composerPlaceholder = status.ready ? "Ask anything" : "Select a model to start chatting";
 
   const homeSuggestions = [
@@ -1133,24 +1143,34 @@ function TextChat({
                   <PanelLeft size={18} />
                 </button>
               )}
-              <div
-                className="chat-context"
-                title={`Context used: ${contextUsed} / ${contextMax} tokens`}
-                aria-label={`Context used: ${contextPercent}%`}
-              >
-                <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true">
-                  <circle cx="10" cy="10" r="8" stroke="var(--border-color)" strokeWidth="2.5" fill="none" />
-                  <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="2.5" fill="none"
-                    strokeDasharray={2 * Math.PI * 8}
-                    strokeDashoffset={2 * Math.PI * 8 * (1 - contextPercent / 100)}
-                    strokeLinecap="round" transform="rotate(-90 10 10)"
-                  />
-                </svg>
-                <span>{contextPercent}%</span>
+              <div className="chat-thread-menu" ref={threadMenuRef}>
+                <button
+                  type="button"
+                  className="chat-thread-btn"
+                  onClick={() => setShowThreadMenu((open) => !open)}
+                  aria-label="Chat thread actions"
+                  aria-haspopup="menu"
+                  aria-expanded={showThreadMenu}
+                >
+                  <MoreVertical size={16} aria-hidden="true" />
+                </button>
+                {showThreadMenu && (
+                  <div className="popover chat-thread-popover" role="menu">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="chat-thread-popover-item danger"
+                      onClick={() => {
+                        setShowThreadMenu(false);
+                        handleClearChat();
+                      }}
+                    >
+                      <Trash2 size={15} aria-hidden="true" />
+                      <span>Clear chat</span>
+                    </button>
+                  </div>
+                )}
               </div>
-              <button type="button" className="chat-thread-btn" onClick={handleClearChat} aria-label="Clear this chat" title="Clear this chat">
-                <Trash2 size={16} />
-              </button>
             </div>
 
             <div

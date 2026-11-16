@@ -629,21 +629,6 @@ body {
   margin-right: auto;
 }
 
-.chat-context {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  height: 32px;
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--md-sys-color-outline);
-}
-
-.chat-context svg {
-  color: var(--md-sys-color-on-surface);
-}
-
 .chat-thread-btn {
   width: 32px;
   height: 32px;
@@ -660,6 +645,54 @@ body {
 .chat-thread-btn:hover {
   background: var(--sidebar-hover, var(--md-sys-color-primary-container));
   color: var(--md-sys-color-on-surface);
+}
+
+.chat-thread-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.chat-thread-popover {
+  top: calc(100% + 6px);
+  right: 0;
+  left: auto;
+  z-index: 30;
+  width: 240px;
+  padding: 6px;
+}
+
+.chat-thread-popover-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--md-sys-color-on-surface);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-thread-popover-item.danger {
+  color: var(--md-sys-color-error);
+}
+
+.chat-thread-popover-item:hover:not(:disabled) {
+  background: var(--sidebar-hover, var(--md-sys-color-surface-variant));
+}
+
+.chat-thread-popover-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.chat-thread-popover-item:focus-visible {
+  outline: 2px solid var(--md-sys-color-on-surface);
+  outline-offset: -2px;
 }
 
 .chat-messages {
