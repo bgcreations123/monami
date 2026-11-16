@@ -554,27 +554,29 @@ body {
   width: 100%;
   max-width: 800px;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
   margin-top: -12px;
 }
 
 .chat-home-suggestion {
-  width: 100%;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 14px;
-  min-height: 44px;
+  gap: 8px;
+  min-height: 38px;
   padding: 0 14px;
-  border: none;
-  border-radius: 12px;
-  background: transparent;
-  color: var(--md-sys-color-on-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface-variant);
   font: inherit;
-  font-size: 0.95rem;
+  font-size: 0.88rem;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .chat-home-suggestion svg {
@@ -584,6 +586,8 @@ body {
 
 .chat-home-suggestion:hover {
   background: var(--sidebar-hover, var(--md-sys-color-primary-container));
+  border-color: color-mix(in srgb, var(--md-sys-color-on-surface) 18%, transparent);
+  color: var(--md-sys-color-on-surface);
 }
 
 .chat-loading {
@@ -1277,31 +1281,10 @@ body {
   background-color: var(--md-sys-color-primary-container);
 }
 
-.current-model-info {
+.top-status-bar-start {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 0.88rem;
-}
-
-.status-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--md-sys-color-success);
-  box-shadow: 0 0 8px var(--md-sys-color-success);
-}
-
-.status-indicator.busy {
-  background-color: var(--md-sys-color-primary);
-  box-shadow: none;
-  animation: pulse 1.8s infinite;
-}
-
-.status-indicator.offline {
-  background-color: var(--md-sys-color-on-surface-variant);
-  box-shadow: none;
-  opacity: 0.6;
 }
 
 .telemetry-group {
@@ -3782,10 +3765,6 @@ html[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) {
   border-radius: var(--md-shape-corner-full);
 }
 
-.current-model-info {
-  white-space: nowrap;
-}
-
 /* ---- Sidebar (chat-app layout). Sizes are in px on purpose: the sidebar keeps its
    proportions when the user raises the app text size for chats. ---- */
 .sidebar {
@@ -3799,6 +3778,8 @@ html[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) {
   border-right: 1px solid var(--border-color-muted);
   font-size: 15px;
   letter-spacing: -0.005em;
+  container-type: inline-size;
+  container-name: sidebar;
 }
 
 /* Drag handle on the sidebar's right edge (also keyboard-adjustable) */
@@ -3845,42 +3826,34 @@ html[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) {
 
 .sidebar-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
+  gap: 8px;
   height: auto;
   min-height: 48px;
-  padding: 0 0 0 10px;
-  margin-bottom: 40px;
+  padding: 4px 0 4px 8px;
+  margin-bottom: 18px;
   overflow: visible;
-}
-
-.sidebar-header-actions {
-  margin-top: 29px;
 }
 
 .sidebar-brand {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 4px;
+  gap: 10px;
   min-width: 0;
-  padding: 4px 0 8px;
+  padding: 0;
   position: relative;
   overflow: visible;
 }
 
 .sidebar-brand-name {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
   color: var(--md-sys-color-on-surface);
   white-space: nowrap;
-  text-align: center;
-  margin-top: -30px;
-  margin-left: 36px;
-  position: relative;
-  z-index: 5;
+  line-height: 1;
 }
 
 .sidebar-mark {
@@ -3888,15 +3861,20 @@ html[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) {
   flex-shrink: 0;
   max-width: 100%;
   height: auto;
-  margin-top: 15px;
-  filter: drop-shadow(0 0 10px rgba(202, 183, 131, 0.55));
-  animation: monami-breathe 4.2s ease-in-out infinite;
-  transform-origin: center;
+  margin: 0;
+}
+
+@container sidebar (max-width: 232px) {
+  .sidebar-brand-name {
+    display: none;
+  }
 }
 
 .sidebar-header-actions {
   display: flex;
+  flex-shrink: 0;
   gap: 2px;
+  margin-top: 0;
 }
 
 .sidebar-icon-btn {
@@ -4152,7 +4130,8 @@ html[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 15px;
+  font-size: 14px;
+  letter-spacing: -0.005em;
   color: var(--md-sys-color-on-surface);
 }
 
@@ -4163,7 +4142,7 @@ html[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Top bar: quiet strip with status pill and theme controls ---- */
+/* ---- Top bar: quiet strip for theme controls ---- */
 .top-status-bar {
   height: 56px;
   background: transparent;
@@ -4172,61 +4151,6 @@ html[data-theme]:not([data-theme="light"]):not([data-theme="dark"]) {
   padding: 0 20px;
 }
 
-.status-pill {
-  gap: 8px;
-  padding: 5px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--md-shape-corner-full);
-  font-size: 0.85rem;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-/* A loaded model: kind, name, and an unload button at the end */
-.status-pill-loaded {
-  padding-right: 4px;
-}
-
-.status-pill-unload {
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--md-sys-color-outline);
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.status-pill-unload:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--md-sys-color-error) 14%, transparent);
-  color: var(--md-sys-color-error);
-}
-
-.status-pill-unload:focus-visible {
-  outline: 2px solid var(--md-sys-color-on-surface);
-  outline-offset: 1px;
-}
-
-.status-pill-unload:disabled {
-  cursor: default;
-}
-
-.status-pill-spin {
-  animation: rotateThinking 0.9s linear infinite;
-}
-
-.status-pill-model {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--md-sys-color-on-surface);
-  font-weight: 500;
-}
 html[data-theme^="dark"] {
   color-scheme: dark;
 }
@@ -4565,15 +4489,4 @@ body {
   font-size: 1rem;
   font-weight: 500;
   color: var(--md-sys-color-on-surface);
-}
-
-@keyframes monami-breathe {
-  0%, 100% { transform: scale(1) rotate(0deg); }
-  50% { transform: scale(1.03) rotate(-2deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sidebar-mark {
-    animation: none;
-  }
 }

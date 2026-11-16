@@ -27,6 +27,7 @@ import {
 import {
   generateImage,
   startServer,
+  startImageBackendWithFallback,
   stopServer,
   waitForServerReady,
   getBackendStatus,
@@ -276,40 +277,28 @@ function Generator({
     if (needsRestart) {
       try {
         console.log("Settings out of sync, restarting backend...");
-        await startServer(targetModel, constraints);
-                let isReady = false;
-        let crashError = null;
-        const maxStartupPolls = (constraints.backendType === "openvino-npu" || constraints.backendType === "apple-npu") ? 1200 : 240;
-        for (let i = 0; i < maxStartupPolls; i++) {
-          const status = await getBackendStatus();
-          if (status.loading) {
+        const result = await startImageBackendWithFallback(targetModel, constraints, {
+          onProgress: (loading) => {
             setRestartLoadProgress({
-              progress: status.loading.progress || 0,
-              phase: status.loading.phase || "Loading model...",
-              speed: status.loading.speed || "",
-              current: status.loading.current || 0,
-              total: status.loading.total || 0,
-              backendMode: status.loading.backendMode || status.settings?.backendMode || "",
-              device: status.loading.device || status.settings?.backendDevice || "",
+              progress: loading.progress || 0,
+              phase: loading.phase || "Loading model...",
+              speed: loading.speed || "",
+              current: loading.current || 0,
+              total: loading.total || 0,
+              backendMode: loading.backendMode || "",
+              device: loading.device || "",
             });
-          }
-          if (status.ready) {
-            isReady = true;
-            break;
-          }
-          if (status.error) {
-            crashError = status.error;
-            break;
-          }
-          if (!status.running && !status.loading?.active && i > 3) {
-            crashError = "The backend process terminated immediately on startup.";
-            break;
-          }
-          await new Promise((r) => setTimeout(r, 500));
+          },
+          onFallback: (fallbackSettings) => setConstraints(fallbackSettings),
+        });
+        if (!result.ready) {
+          throw new Error(result.error || "Backend server failed to start after applying configuration changes.");
         }
-
-        if (!isReady) {
-          throw new Error(crashError || "Backend server failed to start after applying configuration changes.");
+        if (result.fellBackToCpu) {
+          await showAlert({
+            title: "Switched to CPU",
+            message: "Your GPU could not allocate enough memory for this model. Monami switched to CPU mode at 512×512. Image generation will be slower, but it will still work.",
+          });
         }
       } catch (err) {
         console.error("Failed to restart backend:", err);

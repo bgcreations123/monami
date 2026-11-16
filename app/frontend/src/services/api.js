@@ -287,7 +287,6 @@ export async function startServer(modelPath, constraints) {
         vae_tiling: constraints.vaeTiling !== false,
         vae_on_cpu: constraints.vaeOnCpu === true,
         flash_attn: constraints.useFlashAttn !== false,
-        weight_type: constraints.weightType || "auto",
       }),
     });
     const text = await res.text();
@@ -1263,6 +1262,102 @@ export async function pingServer() {
   } catch (e) {
     return false;
   }
+}
+
+const IMAGE_MEMORY_ERROR_PATTERN = /out of memory|outofdevicememory|failed to allocate|not enough free (?:ram|vram)|new_sd_ctx_t failed|alloc_tensor_range/i;
+
+export function isImageBackendMemoryError(message) {
+  return IMAGE_MEMORY_ERROR_PATTERN.test(String(message || ""));
+}
+
+// Start the image backend and wait for it to finish loading. If the GPU backend
+// dies because it cannot allocate the model, retry once on CPU at 512x512 so a
+// low-memory machine still gets a working image pipeline instead of a dead end.
+export async function startImageBackendWithFallback(model, imageConstraints = {}, options = {}) {
+  const { onProgress = () => {}, onFallback = () => {}, isCancelled = () => false } = options;
+
+  const startAndWait = async (settings) => {
+    await startServer(model, settings);
+    let crashError = null;
+    let lastStatus = null;
+    let crashedEarly = false;
+    let errorSeenAt = 0;
+    const backendType = settings.backendType || (settings.useGpu === false ? "cpu" : "auto");
+    const isNpu = backendType === "openvino-npu" || backendType === "apple-npu";
+    const maxPolls = isNpu ? 1800 : backendType === "cpu" ? 900 : 360;
+    for (let i = 0; i < maxPolls; i++) {
+      if (isCancelled()) {
+        return { ready: false, cancelled: true, error: "Model load cancelled by the user.", status: lastStatus };
+      }
+      lastStatus = await getBackendStatus();
+      if (lastStatus.loading) onProgress(lastStatus.loading);
+      if (lastStatus.ready) return { ready: true, cancelled: false, error: null, status: lastStatus };
+      if (lastStatus.error) {
+        // stderr is streamed in chunks, so the first error can be a bare
+        // "[ERROR]" or half a line. Wait briefly for the complete message
+        // before deciding whether this is a GPU memory failure.
+        crashError = lastStatus.error;
+        if (!errorSeenAt) errorSeenAt = Date.now();
+        if (Date.now() - errorSeenAt >= 1500) break;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        continue;
+      }
+      if (!lastStatus.running && !lastStatus.loading?.active && i > 3) {
+        // The process can disappear a moment before the server publishes its
+        // stderr-based error. Give the status endpoint a short grace period so
+        // we can tell a GPU memory crash apart from a generic startup failure.
+        crashedEarly = true;
+        let settled = lastStatus;
+        for (let j = 0; j < 8; j++) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          settled = await getBackendStatus();
+          if (settled.ready) return { ready: true, cancelled: false, error: null, status: settled };
+          if (settled.error) {
+            crashError = settled.error;
+            break;
+          }
+          if (settled.running || settled.loading?.active) break;
+        }
+        if (!crashError) crashError = "The backend process terminated immediately on startup.";
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    return { ready: false, cancelled: false, crashedEarly, error: crashError || "The image backend did not become ready.", status: lastStatus };
+  };
+
+  const primary = await startAndWait(imageConstraints);
+  const gpuRequested = imageConstraints.backendType !== "cpu" && imageConstraints.useGpu !== false;
+  const unexplainedCrash = primary.crashedEarly && (
+    !primary.error ||
+    /terminated immediately|^exited with code/i.test(primary.error)
+  );
+  if (primary.ready || primary.cancelled || !gpuRequested ||
+      (!isImageBackendMemoryError(primary.error) && !unexplainedCrash)) {
+    return { ...primary, settings: imageConstraints, fellBackToCpu: false };
+  }
+
+  const fallbackSettings = {
+    ...imageConstraints,
+    backendType: "cpu",
+    useGpu: false,
+    width: Math.min(512, Number(imageConstraints.width) || 512),
+    height: Math.min(512, Number(imageConstraints.height) || 512),
+    vaeTiling: true,
+    vaeOnCpu: false,
+  };
+  onFallback(fallbackSettings);
+  onProgress({
+    progress: 0,
+    phase: "GPU ran out of memory. Retrying on CPU at 512x512...",
+    speed: "",
+    current: 0,
+    total: 0,
+    backendMode: "CPU",
+    device: "",
+  });
+  const retry = await startAndWait(fallbackSettings);
+  return { ...retry, settings: fallbackSettings, fellBackToCpu: retry.ready };
 }
 
 // Wait for the server to be ready by polling

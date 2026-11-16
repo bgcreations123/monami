@@ -3,7 +3,7 @@ import { FolderOpen, DownloadCloud, Loader2, Trash2, Square, AlertTriangle, Sear
 import "../styles/models.css";
 import { 
   listLocalModels, 
-  startServer, 
+  startImageBackendWithFallback,
   stopServer, 
   importModelFile, 
   deleteModel, 
@@ -222,6 +222,50 @@ const TEXT_MODEL_LIBRARY = [
         notes: "Highly intelligent coding and text assistant. Recommended for mid/high tier systems.",
         url: "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf",
         recommendedTiers: ["Mid", "High"],
+      },
+      {
+        name: "Qwen2.5-Coder-14B-Instruct",
+        filename: "qwen2.5-coder-14b-instruct-q4_k_m.gguf",
+        format: "GGUF",
+        size: "9.0 GB",
+        approxSize: "9.0 GB",
+        resolution: "N/A",
+        notes: "Stronger coding model. Best balance of quality and speed on 16GB+ RAM machines.",
+        url: "https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct-GGUF/resolve/main/qwen2.5-coder-14b-instruct-q4_k_m.gguf",
+        recommendedTiers: ["High"],
+      },
+      {
+        name: "Qwen2.5-Coder-32B-Instruct",
+        filename: "qwen2.5-coder-32b-instruct-q4_k_m.gguf",
+        format: "GGUF",
+        size: "19.9 GB",
+        approxSize: "19.9 GB",
+        resolution: "N/A",
+        notes: "Top-tier local coding model. Closest to Claude/ChatGPT quality offline. Needs 32GB+ RAM.",
+        url: "https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct-GGUF/resolve/main/qwen2.5-coder-32b-instruct-q4_k_m.gguf",
+        recommendedTiers: ["High"],
+      },
+      {
+        name: "DeepSeek-Coder-V2-Lite-Instruct",
+        filename: "DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf",
+        format: "GGUF",
+        size: "9.2 GB",
+        approxSize: "9.2 GB",
+        resolution: "N/A",
+        notes: "Mixture-of-experts coding model with strong reasoning. Great alternative to Qwen.",
+        url: "https://huggingface.co/bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF/resolve/main/DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf",
+        recommendedTiers: ["High"],
+      },
+      {
+        name: "CodeLlama-34B-Instruct",
+        filename: "codellama-34b-instruct.Q4_K_M.gguf",
+        format: "GGUF",
+        size: "19.9 GB",
+        approxSize: "19.9 GB",
+        resolution: "N/A",
+        notes: "Meta's coding model. Strong at code completion and explanation. Needs 32GB+ RAM.",
+        url: "https://huggingface.co/TheBloke/CodeLlama-34B-Instruct-GGUF/resolve/main/codellama-34b-instruct.Q4_K_M.gguf",
+        recommendedTiers: ["High"],
       },
       {
         name: "Llama-3.1-8B-Instruct",
@@ -1133,50 +1177,26 @@ function ModelManager({
           }
         : activeConstraints;
       
-      const response = await startServer(modelId, loadConstraints);
-      console.log(response);
-      
-      let isReady = false;
-      let crashError = null;
-      let readyStatus = null;
-      const isOpenVinoModel = modelInfo?.backendType === "openvino-npu";
-      const maxStartupPolls = (isOpenVinoModel || isCoreMLModel) ? 1200 : 240;
-      for (let i = 0; i < maxStartupPolls; i++) {
-        if (cancelLoadRef.current) {
-          crashError = "Model load cancelled by the user.";
-          break;
-        }
-        const status = await getBackendStatus();
-        if (status.loading) {
+      const result = await startImageBackendWithFallback(modelId, loadConstraints, {
+        isCancelled: () => cancelLoadRef.current,
+        onFallback: (fallbackSettings) => setConstraints(fallbackSettings),
+        onProgress: (loading) => {
           setModelLoadProgress({
-            progress: status.loading.progress || 0,
-            phase: status.loading.phase || "Loading model...",
-            speed: status.loading.speed || "",
-            current: status.loading.current || 0,
-            total: status.loading.total || 0,
-            model: status.loading.model || modelId,
-            backendMode: status.loading.backendMode || status.settings?.backendMode || "",
-            backendBinary: status.loading.backendBinary || status.settings?.backendBinary || "",
-            device: status.loading.device || status.settings?.backendDevice || "",
+            progress: loading.progress || 0,
+            phase: loading.phase || "Loading model...",
+            speed: loading.speed || "",
+            current: loading.current || 0,
+            total: loading.total || 0,
+            model: loading.model || modelId,
+            backendMode: loading.backendMode || "",
+            backendBinary: loading.backendBinary || "",
+            device: loading.device || "",
           });
-        }
-        if (status.ready) {
-          isReady = true;
-          readyStatus = status;
-          break;
-        }
-        if (status.error) {
-          crashError = status.error;
-          break;
-        }
-        if (!status.running && !status.loading?.active && i > 3) {
-          crashError = "The backend process terminated immediately on startup.";
-          break;
-        }
-        await new Promise((r) => setTimeout(r, 500));
-      }
+        },
+      });
 
-      if (isReady) {
+      if (result.ready) {
+        const readyStatus = result.status;
         const loadedModelId = readyStatus?.settings?.backendType === "openvino-npu"
           ? (readyStatus.settings.model || readyStatus.loading?.model || modelId)
           : modelId;
@@ -1191,8 +1211,14 @@ function ModelManager({
         }));
         setActiveModel(loadedModelId);
         setServerRunning(true);
+        if (result.fellBackToCpu) {
+          showAlert({
+            title: "Running on CPU",
+            message: "The GPU could not allocate enough memory for this model, so Monami switched to CPU at 512×512. Image generation will be slower, but it will work.",
+          });
+        }
       } else {
-        throw new Error(crashError || `Model server failed to respond on port ${backendPort}.`);
+        throw new Error(result.error || `Model server failed to respond on port ${backendPort}.`);
       }
     } catch (e) {
       console.error("Failed to load model:", e);
@@ -1697,8 +1723,9 @@ function ModelManager({
                   type="search"
                   value={modelSearch}
                   onChange={(event) => setModelSearch(event.target.value)}
-                  placeholder={activeModelType === "text" ? "Search models and Hugging Face" : "Search models"}
-                  aria-label={activeModelType === "text" ? "Search models and Hugging Face" : "Search models"}
+                  placeholder="Search models"
+                  aria-label={activeModelType === "text" ? "Search local models and Hugging Face" : "Search models"}
+                  title={activeModelType === "text" ? "Search local models and Hugging Face" : "Search models"}
                 />
                 {modelSearch && (
                   <button type="button" className="models-search-clear" onClick={() => setModelSearch("")} aria-label="Clear search">

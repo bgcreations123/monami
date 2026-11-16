@@ -21,9 +21,6 @@ app/chat-history/
 app/transcriptions/
 app/tts-outputs/
 app/tts-cache/
-app/code-sessions/
-app/code-backups/
-app/code-workspace/
 
 # Dependencies and platform-specific copies
 **/node_modules/
@@ -51,4 +48,4 @@ __pycache__/
 .DS_Store
 ._*
 Thumbs.db
-
+.aider*

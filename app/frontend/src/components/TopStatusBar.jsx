@@ -1,61 +1,13 @@
-import React, { memo, useState, useRef, useEffect, useCallback } from "react";
-import { Sun, Moon, Palette, Check, PanelLeft, Power, Loader2 } from "lucide-react";
+import React, { memo, useState, useRef, useEffect } from "react";
+import { Sun, Moon, Palette, Check, PanelLeft } from "lucide-react";
 import { THEMES } from "../themes";
-import { getBackendStatus, getLlmStatus, stopServer, stopLlm } from "../services/api";
-
-// "models/Gemma-4-E4B-Q5_K_M.gguf" -> "Gemma-4-E4B-Q5_K_M"
-const cleanModelName = (name) => String(name || "").split(/[\\/]/).pop().replace(/\.(safetensors|gguf|ckpt|bin)$/i, "");
-
-const RUNTIME_LABELS = { image: "Image", text: "Chat" };
 
 function TopStatusBar({
   theme,
   setTheme,
   sidebarVisible,
   onToggleSidebar,
-  onImageUnloaded,
-  onTextUnloaded,
 }) {
-  // What the server actually has loaded, polled; the screens' own state only knows what was picked
-  const [loaded, setLoaded] = useState({ image: null, text: null });
-  const [unloading, setUnloading] = useState(null);
-
-  const refreshLoaded = useCallback(async () => {
-    const [image, text] = await Promise.all([
-      getBackendStatus().catch(() => null),
-      getLlmStatus().catch(() => null),
-    ]);
-    setLoaded({
-      image: image?.ready ? cleanModelName(image.settings?.model) || "Image model" : null,
-      text: text?.ready ? cleanModelName(text.settings?.model) || "Chat model" : null,
-    });
-  }, []);
-
-  useEffect(() => {
-    refreshLoaded();
-    const timer = setInterval(refreshLoaded, 3000);
-    return () => clearInterval(timer);
-  }, [refreshLoaded]);
-
-  const unload = async (kind) => {
-    setUnloading(kind);
-    try {
-      if (kind === "image") {
-        await stopServer();
-        onImageUnloaded?.();
-      } else {
-        await stopLlm();
-        onTextUnloaded?.();
-      }
-    } catch (err) {
-      console.error(`Failed to unload the ${kind} model:`, err);
-    } finally {
-      await refreshLoaded();
-      setUnloading(null);
-    }
-  };
-
-  const loadedKinds = ["image", "text"].filter((kind) => loaded[kind]);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const menuRef = useRef(null);
 
@@ -73,7 +25,7 @@ function TopStatusBar({
 
   return (
     <div className="top-status-bar">
-      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+      <div className="top-status-bar-start">
         {!sidebarVisible && (
           <button
             type="button"
@@ -84,31 +36,6 @@ function TopStatusBar({
           >
             <PanelLeft size={18} />
           </button>
-        )}
-
-        {loadedKinds.length === 0 ? (
-          <div className="current-model-info status-pill">
-            <div className="status-indicator offline" />
-            <span>No model loaded</span>
-          </div>
-        ) : (
-          loadedKinds.map((kind) => (
-            <div key={kind} className="current-model-info status-pill status-pill-loaded">
-              <div className="status-indicator" />
-              <span>{RUNTIME_LABELS[kind]}</span>
-              <span className="status-pill-model" title={loaded[kind]}>{loaded[kind]}</span>
-              <button
-                type="button"
-                className="status-pill-unload"
-                onClick={() => unload(kind)}
-                disabled={unloading !== null}
-                aria-label={`Unload ${loaded[kind]}`}
-                title="Unload to free memory"
-              >
-                {unloading === kind ? <Loader2 size={13} className="status-pill-spin" aria-hidden="true" /> : <Power size={13} aria-hidden="true" />}
-              </button>
-            </div>
-          ))
         )}
       </div>
 
@@ -134,7 +61,7 @@ function TopStatusBar({
           >
             <Palette size={18} />
           </button>
-          
+
           {showThemeMenu && (
             <div className="theme-dropdown-menu">
               <div className="theme-dropdown-header">Select Theme</div>
@@ -164,8 +91,6 @@ function TopStatusBar({
             </div>
           )}
         </div>
-
-
       </div>
     </div>
   );

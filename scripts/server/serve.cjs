@@ -373,7 +373,6 @@ let currentSettings = {
   vaeTiling: true,
   vaeOnCpu:  false,
   flashAttn: true,
-  weightType: "auto",
   width: 512,
   height: 512,
 };
@@ -389,7 +388,6 @@ const BACKEND_RESTART_SETTING_KEYS = [
   "vaeTiling",
   "vaeOnCpu",
   "flashAttn",
-  "weightType",
   "width",
   "height",
 ];
@@ -400,7 +398,6 @@ function normalizeBackendSettingValue(key, value) {
   if (["steps", "threads", "width", "height"].includes(key)) return parseInt(value);
   if (key === "cfgScale") return Math.round(parseFloat(value) * 1000) / 1000;
   if (["useGpu", "vaeTiling", "vaeOnCpu", "flashAttn"].includes(key)) return Boolean(value);
-  if (key === "weightType") return String(value || "auto").trim().toLowerCase();
   return String(value);
 }
 
@@ -1683,7 +1680,7 @@ function getPathInfo(label, targetPath, type = "file") {
 function isDirWritable(dirPath) {
   try {
     fs.mkdirSync(dirPath, { recursive: true });
-    const testFile = path.join(dirPath, `.Monami-write-test-${Date.now()}.tmp`);
+    const testFile = path.join(dirPath, `.uncensored-ai-studio-write-test-${Date.now()}.tmp`);
     fs.writeFileSync(testFile, "ok", "utf8");
     fs.unlinkSync(testFile);
     return true;
@@ -3548,39 +3545,6 @@ function getBackendMode(backendPath, useGpu, backendType = "auto") {
   return "GPU";
 }
 
-const FULL_PRECISION_WEIGHT_TYPES = new Set(["", "auto", "f32", "f16", "none", "default"]);
-
-// Large SDXL checkpoints are ~6.5-7 GB at fp16 and do not fit in the ~6 GB of
-// shared memory that integrated GPUs expose, so the backend dies with
-// ErrorOutOfDeviceMemory. stable-diffusion.cpp can quantize the weights while
-// loading; q8_0 still fits and is close to full precision, q4_0 is the last
-// resort for very small GPUs. "auto" only quantizes when the model would not fit.
-function getEffectiveWeightType(settings) {
-  const backendType = String(settings.backendType || "").toLowerCase();
-  if (!["vulkan", "cuda", "rocm", "sycl"].includes(backendType)) return "";
-
-  const requested = String(settings.weightType || "auto").trim().toLowerCase();
-  if (!FULL_PRECISION_WEIGHT_TYPES.has(requested)) return requested;
-  if (requested !== "auto") return "";
-
-  let modelGb = 0;
-  try {
-    modelGb = fs.statSync(settings.model).size / (1024 ** 3);
-  } catch (_) {
-    return "";
-  }
-  if (!modelGb) return "";
-
-  const vramGb = Number(getGpuInfo()?.vram_gb) || 0;
-  if (!vramGb) return "";
-
-  // Leave ~0.5 GB for the compositor and ~1.2 GB for activations/VAE buffers.
-  const usableGb = Math.max(1, vramGb - 0.5);
-  if (modelGb + 1.2 <= usableGb) return "";
-  if (modelGb * 0.55 + 1.2 <= usableGb) return "q8_0";
-  return "q4_0";
-}
-
 function stripAnsi(value) {
   return String(value || "").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/\x1b\[[A-Z]/g, "");
 }
@@ -3689,7 +3653,7 @@ function requestHttpsJson(url, timeoutMs = 30000) {
     const req = https.get(url, {
       headers: {
         "Accept": "application/json",
-        "User-Agent": "Monami/1.0",
+        "User-Agent": "Uncensored-AI-Studio/1.0",
       },
       timeout: timeoutMs,
     }, (res) => {
@@ -4765,6 +4729,7 @@ async function startBackend(settings = {}) {
   const resolvedBackendType = resolveBackendType(currentSettings.useGpu, currentSettings.backendType, currentSettings.model);
   currentSettings.backendType = resolvedBackendType;
   currentSettings.useGpu = resolvedBackendType !== "cpu";
+  if (resolvedBackendType !== "vulkan") currentSettings.backendDevice = "";
   const backendPath = selectBackendPath(currentSettings.useGpu, currentSettings.backendType, currentSettings.model);
   if (!backendPath) {
     const setupHint = resolvedBackendType === "apple-npu"
@@ -4863,14 +4828,6 @@ async function startBackend(settings = {}) {
         args.push("--diffusion-fa");
       } else {
         args.push("--fa");
-      }
-    }
-    if (supportsFlags) {
-      const weightType = getEffectiveWeightType(currentSettings);
-      currentSettings.effectiveWeightType = weightType;
-      if (weightType) {
-        args.push("--type", weightType);
-        console.log(`  [backend] Model is larger than available GPU memory; loading weights as ${weightType}.`);
       }
     }
   }
@@ -5027,10 +4984,15 @@ async function startBackend(settings = {}) {
     }
     if (cleanOutput.includes("[ERROR]")) {
       const nextError = describeBackendError(cleanOutput.trim(), currentSettings.model);
-      const hasSpecificFileError = String(backendError || "").includes("incomplete or corrupted");
-      const isGenericContextError = cleanOutput.includes("new_sd_ctx_t failed");
-      if (!(hasSpecificFileError && isGenericContextError)) {
-        backendError = nextError;
+      // stderr chunks can split mid-line and produce a bare "[ERROR]".
+      // Keep the placeholder out of the public status so the UI can wait for
+      // (or fall back on) the real failure message.
+      if (nextError.trim() !== "[ERROR]") {
+        const hasSpecificFileError = String(backendError || "").includes("incomplete or corrupted");
+        const isGenericContextError = cleanOutput.includes("new_sd_ctx_t failed");
+        if (!(hasSpecificFileError && isGenericContextError)) {
+          backendError = nextError;
+        }
       }
     }
   });
@@ -5263,7 +5225,7 @@ function startImageBackendDownload(backendId, redirectCount = 0, redirectUrl = "
   const client = url.startsWith("https") ? https : http;
   const request = client.get(url, {
     headers: {
-      "User-Agent": "Monami/1.0 (+https://github.com/techjarves/Monami)",
+      "User-Agent": "Uncensored-AI-Studio/1.0 (+https://github.com/techjarves/Uncensored-AI-Studio)",
       "Accept": "application/zip, application/octet-stream, */*",
     },
   }, (response) => {
@@ -5495,7 +5457,7 @@ function startModelDownload(url, overrideFilename = null, targetDir = MODELS, ki
   const client = url.startsWith("https") ? https : http;
   const request = client.get(url, {
     headers: {
-      "User-Agent": "Monami/1.0 (+https://github.com/techjarves/Monami)",
+      "User-Agent": "Uncensored-AI-Studio/1.0 (+https://github.com/techjarves/Uncensored-AI-Studio)",
       "Accept": "application/octet-stream, application/x-safetensors, */*",
       "Referer": "https://huggingface.co/",
     },
@@ -7205,7 +7167,6 @@ async function getLlmfitRecommendations(useCase = "chat", limit = 10) {
     if (typeof body.vae_tiling === "boolean") newSettings.vaeTiling = body.vae_tiling;
     if (typeof body.vae_on_cpu === "boolean") newSettings.vaeOnCpu = body.vae_on_cpu;
     if (typeof body.flash_attn === "boolean") newSettings.flashAttn = body.flash_attn;
-    if (body.weight_type) newSettings.weightType = String(body.weight_type).trim().toLowerCase();
     try {
       const targetModel = newSettings.model || currentSettings.model || getDefaultModel();
       assertNoOtherActiveRuntime("image", targetModel);
@@ -7759,7 +7720,7 @@ server.timeout = 0; // Disable socket timeout for large model uploads/downloads
 server.listen(PORT_FRONTEND, process.env.UAIS_HOST || "127.0.0.1", () => {
   console.log("");
   console.log("  ============================================================");
-  console.log("   Monami      |  Running");
+  console.log("   MONAMI                    |  Running");
   console.log("   Server Build: " + SERVER_BUILD);
   console.log("   Frontend : http://localhost:" + PORT_FRONTEND);
   console.log("   Image API: http://127.0.0.1:" + PORT_BACKEND);

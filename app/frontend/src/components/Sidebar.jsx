@@ -262,7 +262,12 @@ function Sidebar({
   ];
 
   const isNewChatActive = activeTab === "chat" && !activeConversationId;
-  const deviceName = specs.gpu_name && !specs.gpu_name.startsWith("Loading") ? specs.gpu_name : specs.cpu_name;
+  const rawDeviceName = specs.gpu_name && !specs.gpu_name.startsWith("Loading") ? specs.gpu_name : specs.cpu_name;
+  const deviceName = (rawDeviceName || "This device")
+    .replace(/\((?:R|TM|C)\)/gi, "")
+    .replace(/^(?:Intel|AMD|NVIDIA|Qualcomm)\s+/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
   const hasResults = sections.some((section) => section.items.length > 0);
 
   return (
@@ -287,8 +292,8 @@ function Sidebar({
       />
       <div className="sidebar-header">
         <div className="sidebar-brand">
-          <BrandMark className="sidebar-mark" size={48} title="Monami" />
-          <span className="sidebar-brand-name">onami</span>
+          <BrandMark className="sidebar-mark" size={24} title="Monami" />
+          <span className="sidebar-brand-name">Monami</span>
         </div>
         <div className="sidebar-header-actions">
           <button

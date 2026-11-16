@@ -138,7 +138,6 @@ function App() {
     vaeOnCpu: false,
     threads: 4,
     backendType: "auto",
-    weightType: "auto",
   });
 
   const [textSettings, setTextSettings] = useState(() => {
@@ -653,9 +652,16 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Sync active model settings default parameters
+  // Sync image constraints with the model that actually loaded. A running
+  // backend (including a CPU fallback or a page refresh) is the source of
+  // truth, so mirror its settings instead of forcing defaults that could
+  // trigger a needless, much slower restart.
   useEffect(() => {
-    if (activeModel) {
+    if (!activeModel) return undefined;
+    let cancelled = false;
+
+    const applyModelDefaults = () => {
+      if (cancelled) return;
       const name = activeModel.toLowerCase();
       if (name.includes("lcm-dreamshaper-v7-fp16")) {
         setConstraints((prev) => ({
@@ -715,8 +721,47 @@ function App() {
           height: 512,
         }));
       }
-    }
-  }, [activeModel]);
+    };
+
+    (async () => {
+      try {
+        const status = await getBackendStatus();
+        const runningModel = status?.settings?.model
+          ? status.settings.model.split(/[\\/]/).pop()
+          : null;
+        const activeName = activeModel.split(/[\\/]/).pop();
+        if (!cancelled && status?.ready && runningModel && runningModel === activeName) {
+          const settings = status.settings;
+          const actualSteps = Number(settings.steps) || null;
+          setConstraints((prev) => ({
+            ...prev,
+            width: Number(settings.width) || prev.width,
+            height: Number(settings.height) || prev.height,
+            steps: actualSteps || prev.steps,
+            ...(actualSteps
+              ? settings.backendType === "openvino-npu"
+                ? { npuSteps: actualSteps }
+                : { standardSteps: actualSteps }
+              : {}),
+            cfgScale: Number.isFinite(Number(settings.cfgScale)) ? Number(settings.cfgScale) : prev.cfgScale,
+            sampler: settings.sampler || prev.sampler,
+            threads: Number(settings.threads) || prev.threads,
+            backendType: settings.backendType || prev.backendType,
+            useGpu: settings.useGpu !== false,
+            vaeTiling: settings.vaeTiling !== false,
+            vaeOnCpu: settings.vaeOnCpu === true,
+            useFlashAttn: settings.flashAttn !== false,
+          }));
+          return;
+        }
+      } catch (_) {}
+      applyModelDefaults();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeModel, serverRunning]);
 
   // Tab contents are kept mounted to preserve loading/generation state when switching tabs
 
@@ -758,11 +803,6 @@ function App() {
     />
   ), [sidebarVisible, toggleSidebar, activeTab, openTabFromSidebar, specs, telemetry, handleNewChat, conversations, activeConversationId, handleDeleteConversation, speechTranscriptions, selectedSpeechTranscript, handleDeleteSpeechTranscription]);
 
-  // The status bar unloads models itself; keep the screens' view in step. The picked image
-  // model stays selected so the next generate loads it again.
-  const handleImageUnloaded = useCallback(() => setServerRunning(false), []);
-  const handleTextUnloaded = useCallback(() => setIsLlmLoaded(false), []);
-
   return (
     <div className="app-container">
       {/* Sidebar with Navigation Rail & Specs */}
@@ -770,11 +810,9 @@ function App() {
 
       {/* Main Panel */}
       <div className="main-content">
-        {/* Top telemetry specs chips bar */}
+        {/* Top theme controls */}
         {showTopBar && (
         <TopStatusBar
-          onImageUnloaded={handleImageUnloaded}
-          onTextUnloaded={handleTextUnloaded}
           theme={theme}
           setTheme={setTheme}
           sidebarVisible={sidebarVisible}
