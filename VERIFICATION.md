@@ -86,7 +86,7 @@ Settings/Models tab. Checked layout, populated content, and console/network heal
 
 ### Final bundle revalidation
 
-The final bundle was rebuilt as `index-DwbuANB3.js` after the last UI pass: the loaded-model
+The final bundle was rebuilt as `index-BumRFPL4.js` after the last UI pass: the loaded-model
 status pill was removed from the top bar (theme controls remain), the sidebar device label
 now strips the GPU vendor prefix (`Intel Iris Xe Graphics` → `Iris Xe Graphics`), the chat
 thread bar now uses a clickable three-dot menu instead of the context-percentage ring plus
@@ -113,9 +113,30 @@ After downloading the Qwen2.5-VL 3B Instruct model and its `mmproj` projector, t
 switched to the vision runtime (`supportsVision: true`, `visionMode: mmproj`).
 
 - Attach button enabled and accepted a PNG through the chat composer.
-- The attached image rendered as a chat attachment chip.
-- A chat message with the image attached produced a real assistant response (no errors).
+- The attached image rendered as a crisp chat attachment chip (40px thumb) in the composer.
+- The sent image now renders in the user chat bubble via a `.chat-bubble-img` class
+  (240×180, `object-fit: contain`, 12px radius, subtle border) instead of inline styles.
+- End-to-end vision confirmed: with an image of a red apple attached, the assistant replied
+  “The main subject of the image is a red apple sitting on a wooden surface.”
+  The outgoing `/api/llm/chat` request carried
+  `[{ type: "text", ... }, { type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } }]`;
+  **0 console/page errors**.
 - Server-side vision state: `supportsVision=true`, `mmproj=mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf`.
+- Fixed history persistence: both the frontend and server were replacing `image_url` content with
+  `[Attached image omitted from saved chat history]`, so the image vanished after reload. They now
+  preserve compact JPEG data URLs (with a 2 MB guard); after a full page reload the attached image
+  and the assistant reply are still present and visible (**0 errors**).
+
+### Final bundle smoke (index-BumRFPL4.js)
+
+- Menu: `["Share screen","Pin","Rename","Download PDF","Export to DOCX","Delete"]`; Pin,
+  PDF download (`monami-chat-*.pdf`), DOCX download (`monami-chat-*.docx`) and Delete all
+  exercised with **0 console/page errors**.
+- Chat attachment: chip visible, image renders in bubble (240×180, `naturalWidth=512`,
+  `complete=true`), assistant vision answer correct, **0 errors**.
+- Reload: conversation reopened from disk with the attached image intact, **0 errors**.
+- `node --test scripts/tests`: **29 pass / 0 fail**; `serve.cjs` `node --check`: clean;
+  production build passes (only the informational Vite chunk-size advisory).
 
 ## Defects fixed in this pass
 

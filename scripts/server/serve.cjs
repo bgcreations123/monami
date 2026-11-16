@@ -5865,6 +5865,9 @@ function sanitizeChatMessageForStorage(message) {
     content = content.map((item) => {
       if (!item || typeof item !== "object") return item;
       if (item.type === "image_url") {
+        const imageUrl = String(item?.image_url?.url || "");
+        const isDataImage = /^data:image\/(png|jpe?g|webp);base64,/i.test(imageUrl);
+        if (isDataImage && imageUrl.length <= 2_000_000) return item;
         return { type: "text", text: "[Attached image omitted from saved chat history]" };
       }
       return item;

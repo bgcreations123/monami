@@ -282,16 +282,24 @@ function App() {
   const [ttsOutputs, setTtsOutputs] = useState([]);
   const [selectedTtsOutput, setSelectedTtsOutput] = useState(null);
 
+  // Keep the optimized (JPEG) data URL with the saved history so attached images
+  // still appear when a conversation is reopened. Guard against oversized blobs.
+  const MAX_STORED_IMAGE_URL_LENGTH = 2_000_000;
   const sanitizeMessageForStorage = (message) => {
     if (!Array.isArray(message?.content)) return message;
     return {
       ...message,
       content: message.content.map((item) => {
         if (item?.type !== "image_url") return item;
-        return {
-          type: "text",
-          text: "[Attached image omitted from saved chat history]",
-        };
+        const url = String(item?.image_url?.url || "");
+        const isDataImage = /^data:image\/(png|jpe?g|webp);base64,/i.test(url);
+        if (!isDataImage || url.length > MAX_STORED_IMAGE_URL_LENGTH) {
+          return {
+            type: "text",
+            text: "[Attached image omitted from saved chat history]",
+          };
+        }
+        return item;
       }),
     };
   };

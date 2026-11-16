@@ -658,7 +658,7 @@ function TextChat({
         ...imageAttachments.map((img) => ({
           type: "image_url",
           image_url: {
-            url: img.dataUrl
+            url: img.sendDataUrl || img.dataUrl
           }
         }))
       ];
@@ -1373,9 +1373,7 @@ function TextChat({
                                 {displayContent.map((item, idx) => {
                                   if (item.type === "text") return <MarkdownRenderer key={idx} content={item.text} />;
                                   if (item.type === "image_url") return (
-                                    <img key={idx} src={item.image_url.url} alt="Attached image"
-                                      style={{ maxWidth: "240px", maxHeight: "180px", objectFit: "contain", borderRadius: "8px", marginTop: "4px" }}
-                                    />
+                                    <img key={idx} src={item.image_url.url} alt="Attached image" className="chat-bubble-img" />
                                   );
                                   return null;
                                 })}

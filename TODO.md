@@ -39,9 +39,11 @@
 - [x] Boot the production server and smoke-test every route + API
 - [x] Confirm no uncaught errors in browser console
 - [x] Write final verification report (`VERIFICATION.md`)
-- [x] Revalidate final bundle (`index-DwbuANB3.js`) after the `serverRunning` effect fix
+- [x] Revalidate final bundle (`index-BumRFPL4.js`) after the `serverRunning` effect fix
 - [x] Strip GPU vendor prefix from the sidebar device label
 - [x] Remove the top-bar model pill; re-test sidebar toggle and theme menu
+- [x] Polish attached-image UI (composer chip + `.chat-bubble-img` bubble image)
+- [x] Preserve attached images across chat-history save/reload (frontend + server)
 
 ## Findings Log
 
@@ -83,6 +85,10 @@
 - `app/frontend/src/components/Settings.jsx`: the 1024px choice was disabled before any
   model was loaded, even though width/height accepted 1024. The lock now applies only when
   a loaded model is actually SD 1.5/custom.
+- `app/frontend/src/App.jsx` + `scripts/server/serve.cjs`: saved chat history replaced
+  `image_url` content with `[Attached image omitted from saved chat history]`, so attached images
+  disappeared after reload. Both now preserve compact JPEG data URLs with a 2 MB guard, and
+  `TextChat.jsx` stores the optimized JPEG URL instead of the full-size PNG preview.
 
 ### Verified
 - Production build succeeds (only a Vite chunk-size advisory).
@@ -108,6 +114,11 @@
   menu contains Share screen, Pin, Rename, Download PDF, Export to DOCX, and Delete; verified
   with **0 errors**.
 - Vision: Qwen2.5-VL 3B + mmproj downloaded; image attach + chat reading verified (0 errors).
+- Attached image on chat (bundle `index-BumRFPL4.js`): chip visible in composer; sent image
+  renders in user bubble via `.chat-bubble-img` (240×180, complete, naturalWidth 512); assistant
+  correctly described a red-apple image; outgoing request carried the `image_url` data URL;
+  image + reply survived a full page reload; **0 errors** in all runs.
+- Final bundle menu revalidated: PDF + DOCX downloads, Pin and Delete all work with 0 errors.
 - GET endpoints smoke-tested (health, diagnostics, hardware, telemetry, model lists,
   backend options/status, outputs, speech/TTS/LLM status, progress, cleanup candidates).
 

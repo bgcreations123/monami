@@ -778,6 +778,19 @@ body {
   color: var(--md-sys-color-error);
 }
 
+.chat-bubble-img {
+  display: block;
+  max-width: 240px;
+  max-height: 180px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 12px;
+  margin: 4px 0 0;
+  border: 1px solid var(--border-color);
+  background: var(--md-sys-color-surface);
+}
+
 .chat-sources {
   display: flex;
   flex-direction: column;
@@ -870,21 +883,23 @@ body {
 .chat-attachment {
   display: flex;
   align-items: center;
-  gap: 8px;
-  max-width: 220px;
-  padding: 6px 4px 6px 8px;
+  gap: 10px;
+  max-width: 240px;
+  padding: 8px 8px 8px 10px;
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  background: var(--md-sys-color-surface);
-  font-size: 0.82rem;
+  border-radius: 14px;
+  background: var(--md-sys-color-surface-variant);
+  font-size: 0.84rem;
   color: var(--md-sys-color-on-surface);
 }
 
 .chat-attachment-thumb {
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: 8px;
+  background: var(--md-sys-color-surface);
 }
 
 .chat-attachment-name {
