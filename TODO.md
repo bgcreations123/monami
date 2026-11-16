@@ -37,8 +37,9 @@
 - [x] Boot the production server and smoke-test every route + API
 - [x] Confirm no uncaught errors in browser console
 - [x] Write final verification report (`VERIFICATION.md`)
-- [x] Revalidate final bundle (`index-BLkmZyTP.js`) after the `serverRunning` effect fix
+- [x] Revalidate final bundle (`index-UlSXPc4K.js`) after the `serverRunning` effect fix
 - [x] Strip GPU vendor prefix from the sidebar device label
+- [x] Remove the top-bar model pill; re-test sidebar toggle and theme menu
 
 ## Findings Log
 
@@ -100,6 +101,7 @@
 - Broad browser audit: all routes, all Settings/Models tabs, no console errors, page
   errors, failed requests, or HTTP errors (and no console warnings).
 - Sidebar collapse/reopen, sidebar search, all 8 themes, and the font-size slider work.
+- Top bar has no model pill; sidebar toggle and theme menu still work with 0 errors.
 - GET endpoints smoke-tested (health, diagnostics, hardware, telemetry, model lists,
   backend options/status, outputs, speech/TTS/LLM status, progress, cleanup candidates).
 
