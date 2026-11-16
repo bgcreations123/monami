@@ -25,6 +25,7 @@
 - [x] Audit shared design tokens (color, spacing, radius, elevation, type scale)
 - [x] Polish sidebar, top status bar, and navigation rail (brand lockup overlap)
 - [x] Remove the loaded-model pill from the top bar; keep the theme controls
+- [x] Replace the chat context-percentage ring + clear icon with a three-dot menu
 - [x] Polish chat composer, bubbles, and markdown/code blocks
 - [x] Polish images, models, speech, TTS, and settings screens
 - [x] Add focus-visible states, reduced-motion support, and responsive polish
@@ -102,6 +103,9 @@
   errors, failed requests, or HTTP errors (and no console warnings).
 - Sidebar collapse/reopen, sidebar search, all 8 themes, and the font-size slider work.
 - Top bar has no model pill; sidebar toggle and theme menu still work with 0 errors.
+- Chat thread bar: three-dot menu (`Chat thread actions`) replaces context % + clear icon; the
+  Clear chat menu item works; 0 errors.
+- Vision: Qwen2.5-VL 3B + mmproj downloaded; image attach + chat reading verified (0 errors).
 - GET endpoints smoke-tested (health, diagnostics, hardware, telemetry, model lists,
   backend options/status, outputs, speech/TTS/LLM status, progress, cleanup candidates).
 

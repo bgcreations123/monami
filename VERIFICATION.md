@@ -1,7 +1,7 @@
 # Monami — Final Verification Report
 
 **Date:** 16 November 2026  
-**Build:** `app/dist` (`assets/index-UlSXPc4K.js`)  
+**Build:** `app/dist` (`assets/index-BnqggxaN.js`)  
 **Server:** `node scripts/server/serve.cjs` on `http://127.0.0.1:1420`  
 **Browser:** Playwright + Microsoft Edge, 1440×900  
 **Machine:** Intel Core i5-1135G7, Intel Iris Xe Graphics, 11.7 GB RAM (Windows)
@@ -86,9 +86,11 @@ Settings/Models tab. Checked layout, populated content, and console/network heal
 
 ### Final bundle revalidation
 
-The final bundle was rebuilt as `index-UlSXPc4K.js` after the last UI pass: the loaded-model
-status pill was removed from the top bar (theme controls remain), and the sidebar device
-label now strips the GPU vendor prefix (`Intel Iris Xe Graphics` → `Iris Xe Graphics`).
+The final bundle was rebuilt as `index-BnqggxaN.js` after the last UI pass: the loaded-model
+status pill was removed from the top bar (theme controls remain), the sidebar device label
+now strips the GPU vendor prefix (`Intel Iris Xe Graphics` → `Iris Xe Graphics`), and the
+chat thread bar now uses a clickable three-dot menu instead of the context-percentage ring
+plus clear-chat delete icon.
 
 Re-tested end to end:
 
@@ -97,9 +99,21 @@ Re-tested end to end:
 - 1024px option remains enabled for the loaded SDXL model; it is enabled before load too.
 - Top bar shows only the theme and palette controls; no model name or unload pill.
 - Sidebar footer fits `Iris Xe Graphics` without truncation.
+- Chat thread bar: no context-percentage ring; kebab button opens a menu with the
+  **Clear chat** item, which executes correctly; 0 console errors.
 - Every route and every Settings/Models tab rendered with **0 console errors, 0 page
   errors, 0 HTTP errors, 0 request failures, 0 warnings**.
 - Report: `final-smoke/report.json`; screenshots: `final-smoke/route-*.png`.
+
+### Vision / image attachment
+
+After downloading the Qwen2.5-VL 3B Instruct model and its `mmproj` projector, the chat was
+switched to the vision runtime (`supportsVision: true`, `visionMode: mmproj`).
+
+- Attach button enabled and accepted a PNG through the chat composer.
+- The attached image rendered as a chat attachment chip.
+- A chat message with the image attached produced a real assistant response (no errors).
+- Server-side vision state: `supportsVision=true`, `mmproj=mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf`.
 
 ## Defects fixed in this pass
 
@@ -117,6 +131,8 @@ Re-tested end to end:
   (`Intel Iris Xe Gra…`); vendor prefixes are now stripped (`Iris Xe Graphics`).
 - The top bar showed a long loaded-model pill (`Chat qwen2.5-coder-14b-instruct…`) plus an
   unload button; removed the pill so the bar holds only the theme controls.
+- The chat thread bar showed a context-percentage ring plus a clear-chat delete icon; replaced
+  with a clickable three-dot menu (`Chat thread actions`) whose **Clear chat** item works.
 - The 1024px resolution option was disabled before a model was selected.
 
 ## Artifact locations
