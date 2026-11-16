@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { LoaderCircle, Trash2, Square, X, ChevronDown, Globe2, Plus, PenLine, Lightbulb, Zap, FileText, ArrowUp, Brain, Mic, AudioLines, Image as ImageIcon, PanelLeft, MoreVertical } from "lucide-react";
+import { LoaderCircle, Trash2, Square, X, ChevronDown, Globe2, Plus, PenLine, Lightbulb, Zap, FileText, ArrowUp, Brain, Mic, AudioLines, Image as ImageIcon, PanelLeft, MoreVertical, ScreenShare, Pin, FileDown } from "lucide-react";
 import {
   getBackendStatus,
   stopServer,
@@ -911,6 +911,123 @@ function TextChat({
     }
   };
 
+  const handleShareScreen = async () => {
+    setShowThreadMenu(false);
+    if (!status.ready) {
+      showAlert({ title: "Vision Required", message: "Load a vision model before sharing a screen.", danger: false });
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      await new Promise((resolve, reject) => {
+        video.onloadedmetadata = resolve;
+        video.onerror = () => reject(new Error("Could not read the shared screen."));
+      });
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/png");
+      stream.getTracks().forEach((t) => t.stop());
+      if (!dataUrl || dataUrl.length < 1000) {
+        throw new Error("Captured screen frame was empty.");
+      }
+      setAttachments((prev) => [
+        ...prev,
+        {
+          id: Math.random().toString(36).substring(7),
+          type: "image",
+          name: `Screen ${new Date().toLocaleTimeString()}`,
+          dataUrl,
+          sendDataUrl: dataUrl,
+          width: canvas.width,
+          height: canvas.height,
+          originalWidth: canvas.width,
+          originalHeight: canvas.height,
+        },
+      ]);
+    } catch (err) {
+      showAlert({ title: "Screen Share Failed", message: err?.message || String(err), danger: false });
+    }
+  };
+
+  const handleTogglePin = () => {
+    setShowThreadMenu(false);
+    if (!activeConversationId) {
+      showAlert({ title: "Nothing to Pin", message: "Start or open a chat first.", danger: false });
+      return;
+    }
+    const conv = conversations.find((c) => c.id === activeConversationId);
+    if (!conv) return;
+    const nextPinned = !conv.pinned;
+    setConversations((prev) => prev.map((c) => (c.id === activeConversationId ? { ...c, pinned: nextPinned } : c)));
+    saveConversationState(activeConversationId, messages, selectedModel, conv.title || null);
+  };
+
+  const handleRename = () => {
+    setShowThreadMenu(false);
+    if (!activeConversationId) {
+      showAlert({ title: "No Conversation", message: "Start or open a chat first.", danger: false });
+      return;
+    }
+    const conv = conversations.find((c) => c.id === activeConversationId);
+    const currentTitle = conv?.title || "";
+    const nextTitle = window.prompt("Rename chat", currentTitle);
+    if (nextTitle === null) return;
+    const trimmed = (nextTitle || "").trim();
+    if (!trimmed) return;
+    setConversations((prev) => prev.map((c) => (c.id === activeConversationId ? { ...c, title: trimmed } : c)));
+    saveConversationState(activeConversationId, messages, selectedModel, trimmed);
+  };
+
+  const handleDownloadPdf = async () => {
+    setShowThreadMenu(false);
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF();
+      let y = 20;
+      doc.setFontSize(12);
+      const lines = [];
+      messages.forEach((m) => {
+        const text = typeof m.content === "string" ? m.content : (Array.isArray(m.content) ? m.content.map((c) => c?.text || "").join(" ") : "");
+        if (m.error) lines.push(`Error: ${text}`);
+        else lines.push(`${m.role === "user" ? "You" : "Assistant"}: ${text}`);
+      });
+      lines.forEach((line) => {
+        if (y > 280) { doc.addPage(); y = 20; }
+        doc.text(line, 14, y);
+        y += 8;
+      });
+      doc.save(`monami-chat-${activeConversationId || "chat"}.pdf`);
+    } catch (err) {
+      showAlert({ title: "Export Failed", message: err?.message || String(err), danger: true });
+    }
+  };
+
+  const handleExportDocx = async () => {
+    setShowThreadMenu(false);
+    try {
+      const { Document, Packer, Paragraph, TextRun } = await import("docx");
+      const children = messages.map((m) => new Paragraph({ children: [new TextRun({ text: `${m.role === "user" ? "You" : "Assistant"}: ${typeof m.content === "string" ? m.content : ""}`, bold: true })] }));
+      const doc = new Document({ sections: [{ children }] });
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `monami-chat-${activeConversationId || "chat"}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showAlert({ title: "Export Failed", message: err?.message || String(err), danger: true });
+    }
+  };
+
   const hasMessages = messages.length > 0;
   // Shows what is actually loaded, not just what was last chosen
   const modelLabel = status.ready && status.settings?.model
@@ -1159,6 +1276,51 @@ function TextChat({
                     <button
                       type="button"
                       role="menuitem"
+                      className="chat-thread-popover-item"
+                      onClick={() => { setShowThreadMenu(false); handleShareScreen(); }}
+                    >
+                      <ScreenShare size={15} aria-hidden="true" />
+                      <span>Share screen</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="chat-thread-popover-item"
+                      onClick={() => { setShowThreadMenu(false); handleTogglePin(); }}
+                    >
+                      <Pin size={15} aria-hidden="true" />
+                      <span>{activeConversationId && conversations.find((c) => c.id === activeConversationId)?.pinned ? "Unpin" : "Pin"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="chat-thread-popover-item"
+                      onClick={() => { setShowThreadMenu(false); handleRename(); }}
+                    >
+                      <PenLine size={15} aria-hidden="true" />
+                      <span>Rename</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="chat-thread-popover-item"
+                      onClick={() => { setShowThreadMenu(false); handleDownloadPdf(); }}
+                    >
+                      <FileDown size={15} aria-hidden="true" />
+                      <span>Download PDF</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="chat-thread-popover-item"
+                      onClick={() => { setShowThreadMenu(false); handleExportDocx(); }}
+                    >
+                      <FileText size={15} aria-hidden="true" />
+                      <span>Export to DOCX</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
                       className="chat-thread-popover-item danger"
                       onClick={() => {
                         setShowThreadMenu(false);
@@ -1166,7 +1328,7 @@ function TextChat({
                       }}
                     >
                       <Trash2 size={15} aria-hidden="true" />
-                      <span>Clear chat</span>
+                      <span>Delete</span>
                     </button>
                   </div>
                 )}

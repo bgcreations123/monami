@@ -1,7 +1,7 @@
 # Monami — Final Verification Report
 
 **Date:** 16 November 2026  
-**Build:** `app/dist` (`assets/index-BnqggxaN.js`)  
+**Build:** `app/dist` (`assets/index-DwbuANB3.js`)  
 **Server:** `node scripts/server/serve.cjs` on `http://127.0.0.1:1420`  
 **Browser:** Playwright + Microsoft Edge, 1440×900  
 **Machine:** Intel Core i5-1135G7, Intel Iris Xe Graphics, 11.7 GB RAM (Windows)
@@ -86,11 +86,12 @@ Settings/Models tab. Checked layout, populated content, and console/network heal
 
 ### Final bundle revalidation
 
-The final bundle was rebuilt as `index-BnqggxaN.js` after the last UI pass: the loaded-model
+The final bundle was rebuilt as `index-DwbuANB3.js` after the last UI pass: the loaded-model
 status pill was removed from the top bar (theme controls remain), the sidebar device label
-now strips the GPU vendor prefix (`Intel Iris Xe Graphics` → `Iris Xe Graphics`), and the
-chat thread bar now uses a clickable three-dot menu instead of the context-percentage ring
-plus clear-chat delete icon.
+now strips the GPU vendor prefix (`Intel Iris Xe Graphics` → `Iris Xe Graphics`), the chat
+thread bar now uses a clickable three-dot menu instead of the context-percentage ring plus
+clear-chat delete icon, and the menu gained export/pin/rename/share actions backed by the
+new `jspdf` / `docx` packages.
 
 Re-tested end to end:
 
@@ -99,8 +100,9 @@ Re-tested end to end:
 - 1024px option remains enabled for the loaded SDXL model; it is enabled before load too.
 - Top bar shows only the theme and palette controls; no model name or unload pill.
 - Sidebar footer fits `Iris Xe Graphics` without truncation.
-- Chat thread bar: no context-percentage ring; kebab button opens a menu with the
-  **Clear chat** item, which executes correctly; 0 console errors.
+- Chat thread bar: no context-percentage ring; kebab opens a menu with the six items
+  (Share screen, Pin, Rename, Download PDF, Export to DOCX, Delete); verified item opens
+  and interactions with **0 console errors**.
 - Every route and every Settings/Models tab rendered with **0 console errors, 0 page
   errors, 0 HTTP errors, 0 request failures, 0 warnings**.
 - Report: `final-smoke/report.json`; screenshots: `final-smoke/route-*.png`.
@@ -132,7 +134,8 @@ switched to the vision runtime (`supportsVision: true`, `visionMode: mmproj`).
 - The top bar showed a long loaded-model pill (`Chat qwen2.5-coder-14b-instruct…`) plus an
   unload button; removed the pill so the bar holds only the theme controls.
 - The chat thread bar showed a context-percentage ring plus a clear-chat delete icon; replaced
-  with a clickable three-dot menu (`Chat thread actions`) whose **Clear chat** item works.
+  with a clickable three-dot menu whose items include Share screen, Pin, Rename, Download PDF,
+  Export to DOCX, and Delete; the Delete action clears the chat.
 - The 1024px resolution option was disabled before a model was selected.
 
 ## Artifact locations

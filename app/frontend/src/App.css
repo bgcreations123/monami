@@ -659,6 +659,9 @@ body {
   z-index: 30;
   width: 240px;
   padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .chat-thread-popover-item {

@@ -26,6 +26,7 @@
 - [x] Polish sidebar, top status bar, and navigation rail (brand lockup overlap)
 - [x] Remove the loaded-model pill from the top bar; keep the theme controls
 - [x] Replace the chat context-percentage ring + clear icon with a three-dot menu
+- [x] Add menu actions: Share screen, Pin, Rename, Download PDF, Export to DOCX, Delete
 - [x] Polish chat composer, bubbles, and markdown/code blocks
 - [x] Polish images, models, speech, TTS, and settings screens
 - [x] Add focus-visible states, reduced-motion support, and responsive polish
@@ -38,7 +39,7 @@
 - [x] Boot the production server and smoke-test every route + API
 - [x] Confirm no uncaught errors in browser console
 - [x] Write final verification report (`VERIFICATION.md`)
-- [x] Revalidate final bundle (`index-UlSXPc4K.js`) after the `serverRunning` effect fix
+- [x] Revalidate final bundle (`index-DwbuANB3.js`) after the `serverRunning` effect fix
 - [x] Strip GPU vendor prefix from the sidebar device label
 - [x] Remove the top-bar model pill; re-test sidebar toggle and theme menu
 
@@ -104,7 +105,8 @@
 - Sidebar collapse/reopen, sidebar search, all 8 themes, and the font-size slider work.
 - Top bar has no model pill; sidebar toggle and theme menu still work with 0 errors.
 - Chat thread bar: three-dot menu (`Chat thread actions`) replaces context % + clear icon; the
-  Clear chat menu item works; 0 errors.
+  menu contains Share screen, Pin, Rename, Download PDF, Export to DOCX, and Delete; verified
+  with **0 errors**.
 - Vision: Qwen2.5-VL 3B + mmproj downloaded; image attach + chat reading verified (0 errors).
 - GET endpoints smoke-tested (health, diagnostics, hardware, telemetry, model lists,
   backend options/status, outputs, speech/TTS/LLM status, progress, cleanup candidates).
